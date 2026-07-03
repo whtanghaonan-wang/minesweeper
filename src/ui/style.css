@@ -1,0 +1,229 @@
+/* ===== 设计令牌（设计文档 §6）===== */
+:root {
+  --bg: #f2efe9;
+  --card: #ffffff;
+  --ink: #4a453e;
+  --ink-soft: #8b8377;
+  --easy: #8fae8b;
+  --challenge: #d9a86c;
+  --hard: #d98880;
+
+  --cell: #e6e1d6;
+  --cell-open: #faf8f4;
+
+  --n1: #7a9cc4;
+  --n2: #8fae8b;
+  --n3: #d98880;
+  --n4: #9b8fc4;
+  --n5: #c4917a;
+  --n6: #7ab8b0;
+  --n7: #b08fa8;
+  --n8: #8b8377;
+
+  --r-card: 20px;
+  --r-btn: 16px;
+
+  --shadow-soft:
+    0 2px 6px rgba(74, 69, 62, 0.08),
+    0 10px 24px rgba(74, 69, 62, 0.07);
+
+  --font-ui:
+    "PingFang SC", "HarmonyOS Sans SC", "Microsoft YaHei UI", "Microsoft YaHei",
+    system-ui, sans-serif;
+  --font-num: ui-rounded, "SF Pro Rounded", "Segoe UI Variable Display", "Segoe UI",
+    system-ui, sans-serif;
+}
+
+/* ===== 基础 ===== */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  min-height: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+  touch-action: manipulation;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+button:focus-visible {
+  outline: 2px solid var(--ink-soft);
+  outline-offset: 3px;
+}
+
+.num {
+  font-family: var(--font-num);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ===== 选关页 ===== */
+.menu {
+  width: 100%;
+  max-width: 430px;
+  padding: max(36px, env(safe-area-inset-top) + 20px) 22px
+    calc(32px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.menu-head {
+  text-align: center;
+  padding: 10px 0 2px;
+}
+
+.menu-head h1 {
+  font-size: 44px;
+  font-weight: 700;
+  letter-spacing: 0.35em;
+  margin-left: 0.35em; /* 抵消 tracking 造成的视觉偏移 */
+}
+
+.menu-sub {
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--ink-soft);
+  letter-spacing: 0.1em;
+}
+
+.menu-note {
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-soft);
+  background: rgba(217, 136, 128, 0.12);
+  border-radius: var(--r-btn);
+  padding: 8px 14px;
+}
+
+.tier {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.tier-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tier-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--tier-color);
+}
+
+.tier-head h2 {
+  font-size: 17px;
+  font-weight: 600;
+}
+
+.tier-range {
+  margin-left: auto;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.tier-easy {
+  --tier-color: var(--easy);
+}
+.tier-challenge {
+  --tier-color: var(--challenge);
+}
+.tier-hard {
+  --tier-color: var(--hard);
+}
+
+.tier-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 3), 1fr);
+  gap: 12px;
+}
+
+.level-tile {
+  aspect-ratio: 1;
+  background: var(--card);
+  border: 1px solid rgba(74, 69, 62, 0.05);
+  border-radius: 22px;
+  box-shadow: var(--shadow-soft);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.level-tile:focus-visible {
+  outline-color: var(--tier-color);
+}
+
+.level-tile:not(.locked):active {
+  transform: scale(0.94);
+  box-shadow: 0 1px 3px rgba(74, 69, 62, 0.1);
+}
+
+.lv-num {
+  font-family: var(--font-num);
+  font-size: 27px;
+  font-weight: 700;
+  color: var(--tier-color);
+  line-height: 1.1;
+}
+
+.lv-best {
+  font-size: 11.5px;
+  color: var(--ink-soft);
+}
+
+.level-tile.locked {
+  background: transparent;
+  border: 1.5px dashed rgba(74, 69, 62, 0.18);
+  box-shadow: none;
+  cursor: default;
+  opacity: 0.55;
+}
+
+.level-tile.locked .lv-num {
+  color: var(--ink-soft);
+}
+
+/* ===== 动效偏好 ===== */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}
