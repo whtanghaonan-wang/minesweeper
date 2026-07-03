@@ -218,6 +218,230 @@ button:focus-visible {
   color: var(--ink-soft);
 }
 
+/* ===== 游戏页 ===== */
+.game {
+  width: 100%;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: max(14px, env(safe-area-inset-top) + 6px) 16px
+    calc(16px + env(safe-area-inset-bottom));
+}
+
+.game-top {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.pill {
+  background: var(--card);
+  border: 1px solid rgba(74, 69, 62, 0.05);
+  border-radius: var(--r-btn);
+  box-shadow: var(--shadow-soft);
+  padding: 8px 14px;
+  font-size: 15px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.15s ease;
+}
+
+button.pill:active {
+  transform: scale(0.95);
+}
+
+.back {
+  font-size: 18px;
+  padding: 6px 14px;
+  line-height: 1.4;
+}
+
+.game-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 16px;
+  white-space: nowrap;
+}
+
+.game-tier {
+  font-size: 11.5px;
+  color: var(--card);
+  background: var(--tier-color, var(--ink-soft));
+  border-radius: 999px;
+  padding: 2px 9px;
+}
+
+.game-stats {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+}
+
+.stat {
+  padding: 6px 11px;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.stat.low {
+  color: var(--hard);
+}
+
+/* ===== 棋盘 ===== */
+.board-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+}
+
+.board {
+  --gap: 3px;
+  --cell-size: min(
+    (100vw - 36px - (var(--w) - 1) * var(--gap)) / var(--w),
+    (100dvh - 190px - (var(--h) - 1) * var(--gap)) / var(--h),
+    42px
+  );
+  display: grid;
+  grid-template-columns: repeat(var(--w), var(--cell-size));
+  grid-auto-rows: var(--cell-size);
+  gap: var(--gap);
+  padding: 10px;
+  background: var(--card);
+  border-radius: var(--r-card);
+  box-shadow: var(--shadow-soft);
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.cell {
+  border-radius: 30%;
+  background: var(--cell);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.55),
+    inset 0 -2px 0 rgba(74, 69, 62, 0.07);
+  font-family: var(--font-num);
+  font-weight: 700;
+  font-size: calc(var(--cell-size) * 0.48);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.08s ease;
+  touch-action: manipulation;
+}
+
+.cell:focus-visible {
+  outline-width: 1.5px;
+  outline-offset: 1px;
+}
+
+.cell:not(.open):active {
+  transform: scale(0.88);
+}
+
+.cell.open {
+  background: var(--cell-open);
+  box-shadow: inset 0 1px 2px rgba(74, 69, 62, 0.06);
+  cursor: default;
+}
+
+.cell.pop {
+  animation: cell-pop 0.22s ease-out backwards;
+}
+
+@keyframes cell-pop {
+  from {
+    transform: scale(0.65);
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.cell.flagged,
+.cell.mine-shown,
+.cell.boom,
+.cell.wrong {
+  font-size: calc(var(--cell-size) * 0.52);
+}
+
+.cell.boom {
+  background: rgba(217, 136, 128, 0.35);
+}
+
+.cell.mine-shown {
+  background: rgba(74, 69, 62, 0.08);
+}
+
+.cell.wrong {
+  color: var(--hard);
+  background: rgba(217, 136, 128, 0.18);
+}
+
+.n1 { color: var(--n1); }
+.n2 { color: var(--n2); }
+.n3 { color: var(--n3); }
+.n4 { color: var(--n4); }
+.n5 { color: var(--n5); }
+.n6 { color: var(--n6); }
+.n7 { color: var(--n7); }
+.n8 { color: var(--n8); }
+
+/* ===== 底部操作区 ===== */
+.game-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.mode-toggle {
+  display: none;
+  background: var(--card);
+  border-radius: var(--r-btn);
+  box-shadow: var(--shadow-soft);
+  padding: 4px;
+  gap: 4px;
+}
+
+.mode-btn {
+  border-radius: calc(var(--r-btn) - 4px);
+  padding: 10px 20px;
+  font-size: 15.5px;
+  color: var(--ink-soft);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.mode-btn.active {
+  background: var(--bg);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+@media (pointer: coarse) {
+  .mode-toggle {
+    display: inline-flex;
+  }
+}
+
+.restart {
+  padding: 12px 18px;
+}
+
 /* ===== 动效偏好 ===== */
 @media (prefers-reduced-motion: reduce) {
   *,

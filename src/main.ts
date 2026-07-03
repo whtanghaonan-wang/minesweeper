@@ -2,6 +2,7 @@ import "./ui/style.css";
 import { createStorage } from "./core/storage";
 import type { LevelSpec } from "./core/levels";
 import { showMenu } from "./ui/menu";
+import { showGame } from "./ui/game";
 
 const root = document.querySelector<HTMLDivElement>("#app")!;
 
@@ -24,9 +25,15 @@ function gotoMenu(): void {
 }
 
 function gotoGame(level: LevelSpec): void {
-  // Task 7 接入游戏页
-  console.log("play", level.id);
-  gotoMenu();
+  showGame(root, {
+    level,
+    onExit: gotoMenu,
+    onFinish: (result) => {
+      // Task 8 接入结算弹窗
+      console.log("finish", result);
+      gotoMenu();
+    },
+  });
 }
 
 gotoMenu();
