@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- 暖米白大圆角底 -->
+  <rect width="512" height="512" rx="115" fill="#F2EFE9"/>
+  <!-- 鼠尾草绿草地 -->
+  <ellipse cx="256" cy="402" rx="128" ry="28" fill="#8FAE8B" opacity="0.55"/>
+  <!-- 旗杆 -->
+  <rect x="240" y="118" width="22" height="290" rx="11" fill="#4A453E"/>
+  <!-- 珊瑚色小旗 -->
+  <path d="M272 138 L390 184 L272 230 Z" fill="#D98880" stroke="#D98880" stroke-width="28" stroke-linejoin="round"/>
+</svg>

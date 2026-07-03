@@ -48,3 +48,11 @@ function gotoGame(level: LevelSpec): void {
 }
 
 gotoMenu();
+
+// PWA：仅在 Web 环境（https 或本地预览）注册 Service Worker；Tauri 桌面端不需要
+if (
+  "serviceWorker" in navigator &&
+  (location.protocol === "https:" || location.hostname === "localhost")
+) {
+  void import("virtual:pwa-register").then(({ registerSW }) => registerSW({ immediate: true }));
+}
