@@ -12,7 +12,7 @@ export default defineConfig({
       manifest: {
         name: "扫雷",
         short_name: "扫雷",
-        description: "无猜扫雷 · 十关三档",
+        description: "无猜扫雷 · 二十关五档",
         lang: "zh-CN",
         display: "standalone",
         background_color: "#F2EFE9",

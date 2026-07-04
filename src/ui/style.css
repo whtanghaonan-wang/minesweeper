@@ -22,8 +22,8 @@
   --n7: #b08fa8;
   --n8: #8b8377;
 
-  --r-card: 20px;
-  --r-btn: 16px;
+  --r-card: 1.25rem;
+  --r-btn: 1rem;
 
   --shadow-soft:
     0 2px 6px rgba(74, 69, 62, 0.08),
@@ -43,7 +43,11 @@
   padding: 0;
 }
 
-html,
+html {
+  height: 100%;
+  font-size: clamp(14px, 1.1vmin + 9px, 26px);
+}
+
 body {
   height: 100%;
 }
@@ -52,7 +56,7 @@ body {
   background: var(--bg);
   color: var(--ink);
   font-family: var(--font-ui);
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1.5;
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
@@ -88,12 +92,12 @@ button:focus-visible {
 /* ===== 选关页 ===== */
 .menu {
   width: 100%;
-  max-width: 430px;
-  padding: max(36px, env(safe-area-inset-top) + 20px) 22px
-    calc(32px + env(safe-area-inset-bottom));
+  max-width: 27rem;
+  padding: max(2.25rem, env(safe-area-inset-top) + 1.25rem) 1.375rem
+    calc(2rem + env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 1.875rem;
 }
 
 .menu-head {
@@ -102,26 +106,26 @@ button:focus-visible {
 }
 
 .menu-head h1 {
-  font-size: 44px;
+  font-size: 2.75rem;
   font-weight: 700;
   letter-spacing: 0.35em;
   margin-left: 0.35em; /* 抵消 tracking 造成的视觉偏移 */
 }
 
 .menu-sub {
-  margin-top: 6px;
-  font-size: 14px;
+  margin-top: 0.375rem;
+  font-size: 0.875rem;
   color: var(--ink-soft);
   letter-spacing: 0.1em;
 }
 
 .menu-note {
   text-align: center;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--ink-soft);
   background: rgba(217, 136, 128, 0.12);
   border-radius: var(--r-btn);
-  padding: 8px 14px;
+  padding: 0.5rem 0.875rem;
 }
 
 .tier-easy {
@@ -253,16 +257,16 @@ button:focus-visible {
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  gap: 12px;
-  padding: max(14px, env(safe-area-inset-top) + 6px) 16px
-    calc(16px + env(safe-area-inset-bottom));
+  gap: 0.75rem;
+  padding: max(0.875rem, env(safe-area-inset-top) + 0.375rem) 1rem
+    calc(1rem + env(safe-area-inset-bottom));
 }
 
 .game-top {
   display: flex;
   align-items: center;
-  gap: 10px;
-  max-width: 560px;
+  gap: 0.625rem;
+  max-width: 35rem;
   width: 100%;
   margin: 0 auto;
 }
@@ -272,11 +276,11 @@ button:focus-visible {
   border: 1px solid rgba(74, 69, 62, 0.05);
   border-radius: var(--r-btn);
   box-shadow: var(--shadow-soft);
-  padding: 8px 14px;
-  font-size: 15px;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.9375rem;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: 0.375rem;
   transition: transform 0.15s ease;
 }
 
@@ -285,36 +289,36 @@ button.pill:active {
 }
 
 .back {
-  font-size: 18px;
-  padding: 6px 14px;
+  font-size: 1.125rem;
+  padding: 0.375rem 0.875rem;
   line-height: 1.4;
 }
 
 .game-title {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 16px;
+  gap: 0.5rem;
+  font-size: 1rem;
   white-space: nowrap;
 }
 
 .game-tier {
-  font-size: 11.5px;
+  font-size: 0.72rem;
   color: var(--card);
   background: var(--tier-color, var(--ink-soft));
   border-radius: 999px;
-  padding: 2px 9px;
+  padding: 0.125rem 0.5625rem;
 }
 
 .game-stats {
   margin-left: auto;
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
 }
 
 .stat {
-  padding: 6px 11px;
-  font-size: 14.5px;
+  padding: 0.375rem 0.6875rem;
+  font-size: 0.9rem;
   font-weight: 600;
 }
 
@@ -430,8 +434,8 @@ button.pill:active {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  max-width: 560px;
+  gap: 0.75rem;
+  max-width: 35rem;
   width: 100%;
   margin: 0 auto;
 }
@@ -441,14 +445,14 @@ button.pill:active {
   background: var(--card);
   border-radius: var(--r-btn);
   box-shadow: var(--shadow-soft);
-  padding: 4px;
-  gap: 4px;
+  padding: 0.25rem;
+  gap: 0.25rem;
 }
 
 .mode-btn {
-  border-radius: calc(var(--r-btn) - 4px);
-  padding: 10px 20px;
-  font-size: 15.5px;
+  border-radius: calc(var(--r-btn) - 0.25rem);
+  padding: 0.625rem 1.25rem;
+  font-size: 0.97rem;
   color: var(--ink-soft);
   transition: background 0.15s ease, color 0.15s ease;
 }
@@ -466,7 +470,7 @@ button.pill:active {
 }
 
 .restart {
-  padding: 12px 18px;
+  padding: 0.75rem 1.125rem;
 }
 
 .pc-hint {
@@ -493,7 +497,7 @@ button.pill:active {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 24px;
+  padding: 1.5rem;
   z-index: 10;
   animation: overlay-in 0.2s ease-out;
 }
@@ -506,14 +510,14 @@ button.pill:active {
 
 .modal {
   background: var(--card);
-  border-radius: 24px;
+  border-radius: 1.5rem;
   box-shadow: 0 18px 50px rgba(74, 69, 62, 0.25);
-  padding: 30px 26px 24px;
-  width: min(330px, 100%);
+  padding: 1.875rem 1.625rem 1.5rem;
+  width: min(20.6rem, 100%);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 0.5rem;
   text-align: center;
   animation: modal-in 0.24s cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
 }
@@ -526,48 +530,48 @@ button.pill:active {
 }
 
 .modal-icon {
-  font-size: 44px;
+  font-size: 2.75rem;
   line-height: 1.2;
 }
 
 .modal h2 {
-  font-size: 22px;
+  font-size: 1.375rem;
   font-weight: 700;
 }
 
 .modal-time {
-  font-size: 15px;
+  font-size: 0.9375rem;
   color: var(--ink-soft);
 }
 
 .best-badge {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: #9a7440;
   background: rgba(217, 168, 108, 0.22);
   border-radius: 999px;
-  padding: 4px 13px;
-  margin-top: 2px;
+  padding: 0.25rem 0.8125rem;
+  margin-top: 0.125rem;
 }
 
 .save-warn {
-  font-size: 12.5px;
+  font-size: 0.78rem;
   color: var(--hard);
 }
 
 .modal-actions {
-  margin-top: 14px;
+  margin-top: 0.875rem;
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 0.5625rem;
 }
 
 .btn {
   width: 100%;
   border-radius: var(--r-btn);
-  padding: 12px 16px;
-  font-size: 15.5px;
+  padding: 0.75rem 1rem;
+  font-size: 0.97rem;
   font-weight: 600;
   background: var(--bg);
   color: var(--ink);
