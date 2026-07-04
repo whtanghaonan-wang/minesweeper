@@ -440,6 +440,20 @@ button.pill:active {
   padding: 12px 18px;
 }
 
+.pc-hint {
+  display: none;
+  text-align: center;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  letter-spacing: 0.06em;
+}
+
+@media (pointer: fine) {
+  .pc-hint {
+    display: block;
+  }
+}
+
 /* ===== 结算弹窗 ===== */
 .overlay {
   position: fixed;

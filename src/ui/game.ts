@@ -52,6 +52,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   const size = w * h;
 
   let board: Board | null = null;
+  const preFlags = new Set<number>();
   let finished = false;
   let mode: Mode = "dig";
   let deadline = 0;
@@ -111,7 +112,10 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   const restartBtn = button("pill restart", "↻ 重开", restart);
   bottom.append(modeToggle, restartBtn);
 
-  game.append(top, boardVp, bottom);
+  const hint = document.createElement("p");
+  hint.className = "pc-hint";
+  hint.textContent = "左键挖开 · 右键插旗 · 滚轮缩放 · 拖动平移";
+  game.append(top, boardVp, bottom, hint);
   root.replaceChildren(game);
 
   updateStats();
@@ -260,9 +264,20 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   // ===== 动作 =====
   function act(i: number, action: Mode): void {
     if (finished) return;
+    const liEarly = toLogical(i);
     if (board === null) {
-      if (action === "flag") return; // 开局前无处落旗
-      board = generate(level, toLogical(i), mulberry32((Math.random() * 2 ** 32) >>> 0));
+      if (action === "flag") {
+        // 开局前预旗：只记标记，不生成盘面
+        if (preFlags.has(liEarly)) preFlags.delete(liEarly);
+        else preFlags.add(liEarly);
+        syncCell(i);
+        updateStats();
+        return;
+      }
+      if (preFlags.has(liEarly)) return; // 旗格不可挖，也不触发开局
+      board = generate(level, liEarly, mulberry32((Math.random() * 2 ** 32) >>> 0));
+      for (const li of preFlags) toggleFlag(board, li); // 预旗原样落盘
+      preFlags.clear();
       startTimer();
     }
     const b = board;
@@ -317,7 +332,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   }
 
   function updateStats(): void {
-    const left = board === null ? level.mines : level.mines - flaggedCount(board);
+    const left = board === null ? level.mines - preFlags.size : level.mines - flaggedCount(board);
     mineStat.textContent = `💣 ${left}`;
   }
 
@@ -403,9 +418,19 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   }
 
   function syncCell(vi: number): void {
-    const b = board;
     const el = cells[vi]!;
-    if (b === null) return;
+    if (board === null) {
+      const li = toLogical(vi);
+      if (preFlags.has(li)) {
+        el.className = "cell flagged";
+        el.textContent = "🚩";
+      } else {
+        el.className = "cell";
+        el.textContent = "";
+      }
+      return;
+    }
+    const b = board;
     const li = toLogical(vi);
     if (b.revealed[li] && !b.mine[li]) {
       const n = b.adjacent[li];

@@ -141,6 +141,26 @@ describe("游戏页", () => {
     cells[7]!.dispatchEvent(up);
     expect(cells[7]!.textContent).toBe("🚩");
   });
+
+  it("开局前可插旗：计数联动、首挖后旗保留", () => {
+    const cells = start();
+    press(cells[7]!, { button: 2 }); // 盘面未生成时右键
+    expect(cells[7]!.textContent).toBe("🚩");
+    expect(root.querySelector(".game-stats")!.textContent).toContain("6"); // 7 - 1
+    press(cells[7]!, { button: 2 }); // 再点取消
+    expect(cells[7]!.textContent).toBe("");
+    press(cells[7]!, { button: 2 }); // 重新插上
+    press(cells[63]!); // 首挖生成盘面
+    expect(cells[7]!.textContent).toBe("🚩"); // 旗保留
+    expect(root.querySelector(".game-stats")!.textContent).toContain("6");
+  });
+
+  it("开局前预旗格上左键挖无操作（不生成盘面）", () => {
+    const cells = start();
+    press(cells[5]!, { button: 2 });
+    press(cells[5]!); // 对着旗挖
+    expect(root.querySelectorAll(".cell.open")).toHaveLength(0);
+  });
 });
 
 describe("结算弹窗", () => {
