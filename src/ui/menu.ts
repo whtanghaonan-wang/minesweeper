@@ -1,6 +1,7 @@
-import { LEVELS, TIER_NAMES, type LevelSpec, type Tier } from "../core/levels";
+import { LEVELS, type LevelSpec } from "../core/levels";
 import type { GameStorage } from "../core/storage";
 import { fmtTime } from "./format";
+import { vineLayout, type VineLayout, type VineNode } from "./vine";
 
 export interface MenuDeps {
   storage: GameStorage;
@@ -9,8 +10,7 @@ export interface MenuDeps {
   onPlay(level: LevelSpec): void;
 }
 
-const TIER_ORDER: Tier[] = ["easy", "challenge", "hard", "expert", "abyss"];
-const TIER_COLS: Record<Tier, number> = { easy: 4, challenge: 4, hard: 4, expert: 4, abyss: 4 };
+const SVG_NS = "http://www.w3.org/2000/svg";
 
 export function showMenu(root: HTMLElement, deps: MenuDeps): void {
   const save = deps.storage.load();
@@ -20,7 +20,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps): void {
 
   const head = document.createElement("header");
   head.className = "menu-head";
-  head.innerHTML = `<h1>扫雷</h1><p class="menu-sub">无猜 · 十关 · 三档</p>`;
+  head.innerHTML = `<h1>扫雷</h1><p class="menu-sub">无猜 · 二十关 · 五档</p>`;
   menu.appendChild(head);
 
   if (deps.persistWarning) {
@@ -30,57 +30,98 @@ export function showMenu(root: HTMLElement, deps: MenuDeps): void {
     menu.appendChild(note);
   }
 
-  for (const tier of TIER_ORDER) {
-    const levels = LEVELS.filter((l) => l.tier === tier);
-    const section = document.createElement("section");
-    section.className = `tier tier-${tier}`;
+  const layout = vineLayout(LEVELS);
+  const map = document.createElement("div");
+  map.className = "vine-map";
+  map.appendChild(buildSvg(layout));
 
-    const first = levels[0]!.id;
-    const last = levels[levels.length - 1]!.id;
-    const headEl = document.createElement("div");
-    headEl.className = "tier-head";
-    headEl.innerHTML = `<span class="tier-dot"></span><h2>${TIER_NAMES[tier]}</h2><span class="tier-range num">第 ${first}–${last} 关</span>`;
-    section.appendChild(headEl);
-
-    const grid = document.createElement("div");
-    grid.className = "tier-grid";
-    grid.style.setProperty("--cols", String(TIER_COLS[tier]));
-    for (const level of levels) grid.appendChild(levelTile(level, save.unlockedLevel, save.bestTimes[level.id], deps));
-    section.appendChild(grid);
-    menu.appendChild(section);
+  let currentEl: HTMLElement | null = null;
+  for (let i = 0; i < LEVELS.length; i++) {
+    const level = LEVELS[i]!;
+    const btn = vineNode(level, layout.nodes[i]!, layout, save.unlockedLevel, save.bestTimes[level.id], deps);
+    if (btn.classList.contains("current")) currentEl = btn;
+    map.appendChild(btn);
   }
 
+  menu.appendChild(map);
   root.replaceChildren(menu);
+  // 打开即定位到当前进度（jsdom 无 scrollIntoView 时静默跳过）
+  currentEl?.scrollIntoView?.({ block: "center" });
 }
 
-function levelTile(
+function buildSvg(layout: VineLayout): SVGSVGElement {
+  const svg = document.createElementNS(SVG_NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${layout.width} ${layout.height}`);
+  svg.classList.add("vine-svg");
+
+  const pts = (points: { x: number; y: number }[]): string =>
+    points.map((p) => `${p.x},${p.y}`).join(" ");
+
+  const base = document.createElementNS(SVG_NS, "polyline");
+  base.setAttribute("points", pts(layout.nodes));
+  base.classList.add("vine-base");
+  svg.appendChild(base);
+
+  for (const seg of layout.segments) {
+    const pl = document.createElementNS(SVG_NS, "polyline");
+    pl.setAttribute("points", pts(seg.points));
+    pl.classList.add("vine-band", `tier-${seg.tier}`);
+    svg.appendChild(pl);
+  }
+
+  const deco = (x: number, y: number, glyph: string): void => {
+    const t = document.createElementNS(SVG_NS, "text");
+    t.setAttribute("x", String(x));
+    t.setAttribute("y", String(y));
+    t.setAttribute("font-size", "16");
+    t.textContent = glyph;
+    svg.appendChild(t);
+  };
+  const rootNode = layout.nodes[0]!;
+  const topNode = layout.nodes[layout.nodes.length - 1]!;
+  deco(rootNode.x - 30, rootNode.y + 26, "🌱");
+  deco(topNode.x + 16, topNode.y - 20, "👑");
+  return svg;
+}
+
+function vineNode(
   level: LevelSpec,
+  pos: VineNode,
+  layout: VineLayout,
   unlockedLevel: number,
   best: number | undefined,
   deps: MenuDeps,
 ): HTMLButtonElement {
   const locked = level.id > unlockedLevel;
-  const tile = document.createElement("button");
-  tile.type = "button";
-  tile.className = `level-tile${locked ? " locked" : ""}`;
+  const done = best !== undefined || level.id < unlockedLevel;
+  const current = !locked && !done;
+
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = `vine-node tier-${level.tier}`;
+  if (locked) btn.classList.add("locked");
+  if (done) btn.classList.add("done");
+  if (current) btn.classList.add("current");
+  btn.style.left = `${(pos.x / layout.width) * 100}%`;
+  btn.style.top = `${(pos.y / layout.height) * 100}%`;
 
   const num = document.createElement("span");
-  num.className = "lv-num";
+  num.className = "vn-num num";
   num.textContent = String(level.id);
   const sub = document.createElement("span");
-  sub.className = "lv-best num";
+  sub.className = "vn-best num";
   sub.textContent = locked ? "🔒" : best !== undefined ? fmtTime(best) : "未通关";
+  btn.append(num, sub);
 
-  tile.append(num, sub);
   if (locked) {
-    tile.disabled = true;
-    tile.setAttribute("aria-label", `第 ${level.id} 关（未解锁）`);
+    btn.disabled = true;
+    btn.setAttribute("aria-label", `第 ${level.id} 关（未解锁）`);
   } else {
-    tile.setAttribute(
+    btn.setAttribute(
       "aria-label",
       `第 ${level.id} 关，${best !== undefined ? `最好成绩 ${fmtTime(best)}` : "未通关"}`,
     );
-    tile.addEventListener("click", () => deps.onPlay(level));
+    btn.addEventListener("click", () => deps.onPlay(level));
   }
-  return tile;
+  return btn;
 }

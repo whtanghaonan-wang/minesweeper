@@ -45,23 +45,34 @@ afterEach(() => {
 });
 
 describe("选关页", () => {
-  it("渲染 20 个关卡，仅第 1 关可玩，其余锁定", () => {
+  it("渲染 20 个藤蔓节点，仅第 1 关可玩，其余锁定", () => {
     showMenu(root, { storage: createStorage(memBackend()), onPlay: () => {} });
-    const tiles = root.querySelectorAll<HTMLButtonElement>(".level-tile");
-    expect(tiles).toHaveLength(20);
-    expect(tiles[0]!.disabled).toBe(false);
-    for (let i = 1; i < 20; i++) expect(tiles[i]!.disabled).toBe(true);
+    const nodes = root.querySelectorAll<HTMLButtonElement>(".vine-node");
+    expect(nodes).toHaveLength(20);
+    expect(nodes[0]!.disabled).toBe(false);
+    expect(nodes[0]!.classList.contains("current")).toBe(true);
+    for (let i = 1; i < 20; i++) {
+      expect(nodes[i]!.disabled).toBe(true);
+      expect(nodes[i]!.classList.contains("locked")).toBe(true);
+    }
+    expect(root.querySelector(".menu-sub")!.textContent).toContain("二十关");
+    expect(root.querySelectorAll(".vine-svg polyline").length).toBeGreaterThanOrEqual(6); // 底线+5 档色带
   });
 
-  it("显示最好成绩并可进入已解锁关卡", () => {
+  it("显示最好成绩、当前关高亮并自动滚动定位、可进入已解锁关", () => {
+    const scrolled = vi.fn();
+    Element.prototype.scrollIntoView = scrolled;
     const storage = createStorage(memBackend());
     storage.recordWin(1, 83);
     const played: number[] = [];
     showMenu(root, { storage, onPlay: (l) => played.push(l.id) });
-    const tiles = root.querySelectorAll<HTMLButtonElement>(".level-tile");
-    expect(tiles[0]!.textContent).toContain("1:23");
-    expect(tiles[1]!.disabled).toBe(false); // 已解锁第 2 关
-    tiles[1]!.click();
+    const nodes = root.querySelectorAll<HTMLButtonElement>(".vine-node");
+    expect(nodes[0]!.classList.contains("done")).toBe(true);
+    expect(nodes[0]!.textContent).toContain("1:23");
+    expect(nodes[1]!.disabled).toBe(false);
+    expect(nodes[1]!.classList.contains("current")).toBe(true);
+    expect(scrolled).toHaveBeenCalled();
+    nodes[1]!.click();
     expect(played).toEqual([2]);
   });
 });

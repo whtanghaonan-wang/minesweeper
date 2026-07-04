@@ -7,6 +7,8 @@
   --easy: #8fae8b;
   --challenge: #d9a86c;
   --hard: #d98880;
+  --expert: #9b8fc4;
+  --abyss: #7a9cc4;
 
   --cell: #e6e1d6;
   --cell-open: #faf8f4;
@@ -122,36 +124,6 @@ button:focus-visible {
   padding: 8px 14px;
 }
 
-.tier {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.tier-head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.tier-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--tier-color);
-}
-
-.tier-head h2 {
-  font-size: 17px;
-  font-weight: 600;
-}
-
-.tier-range {
-  margin-left: auto;
-  font-size: 13px;
-  color: var(--ink-soft);
-}
-
 .tier-easy {
   --tier-color: var(--easy);
 }
@@ -161,61 +133,118 @@ button:focus-visible {
 .tier-hard {
   --tier-color: var(--hard);
 }
-
-.tier-grid {
-  display: grid;
-  grid-template-columns: repeat(var(--cols, 3), 1fr);
-  gap: 12px;
+.tier-expert {
+  --tier-color: var(--expert);
+}
+.tier-abyss {
+  --tier-color: var(--abyss);
 }
 
-.level-tile {
-  aspect-ratio: 1;
+/* ===== 藤蔓选关 ===== */
+.vine-map {
+  position: relative;
+  width: min(100%, 24rem);
+  margin: 0 auto;
+}
+
+.vine-svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.vine-base {
+  fill: none;
+  stroke: #ddd3c2;
+  stroke-width: 10;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.vine-band {
+  fill: none;
+  stroke: var(--tier-color);
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+
+.vine-node {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
   background: var(--card);
-  border: 1px solid rgba(74, 69, 62, 0.05);
-  border-radius: 22px;
+  border: 2px solid var(--tier-color);
   box-shadow: var(--shadow-soft);
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
-  transition:
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
+  transition: transform 0.15s ease;
 }
 
-.level-tile:focus-visible {
+.vine-node:not(.locked):active {
+  transform: translate(-50%, -50%) scale(0.92);
+}
+
+.vine-node:focus-visible {
   outline-color: var(--tier-color);
 }
 
-.level-tile:not(.locked):active {
-  transform: scale(0.94);
-  box-shadow: 0 1px 3px rgba(74, 69, 62, 0.1);
-}
-
-.lv-num {
-  font-family: var(--font-num);
-  font-size: 27px;
+.vn-num {
   font-weight: 700;
+  font-size: 1.05rem;
   color: var(--tier-color);
-  line-height: 1.1;
+  line-height: 1;
 }
 
-.lv-best {
-  font-size: 11.5px;
+.vn-best {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  margin-top: 0.3rem;
+  font-size: 0.68rem;
   color: var(--ink-soft);
+  white-space: nowrap;
+  pointer-events: none;
 }
 
-.level-tile.locked {
+.vine-node.done {
+  background: var(--tier-color);
+}
+
+.vine-node.done .vn-num {
+  color: #fff;
+}
+
+.vine-node.locked {
   background: transparent;
-  border: 1.5px dashed rgba(74, 69, 62, 0.18);
+  border-style: dashed;
+  border-color: rgba(74, 69, 62, 0.25);
   box-shadow: none;
   cursor: default;
-  opacity: 0.55;
+  opacity: 0.6;
 }
 
-.level-tile.locked .lv-num {
+.vine-node.locked .vn-num {
   color: var(--ink-soft);
+}
+
+.vine-node.current {
+  animation: vine-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes vine-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(74, 69, 62, 0.22);
+  }
+  50% {
+    box-shadow: 0 0 0 0.55rem rgba(74, 69, 62, 0);
+  }
 }
 
 /* ===== 游戏页 ===== */
