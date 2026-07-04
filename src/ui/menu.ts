@@ -9,8 +9,8 @@ export interface MenuDeps {
   onPlay(level: LevelSpec): void;
 }
 
-const TIER_ORDER: Tier[] = ["easy", "challenge", "hard"];
-const TIER_COLS: Record<Tier, number> = { easy: 3, challenge: 4, hard: 3 };
+const TIER_ORDER: Tier[] = ["easy", "challenge", "hard", "expert", "abyss"];
+const TIER_COLS: Record<Tier, number> = { easy: 4, challenge: 4, hard: 4, expert: 4, abyss: 4 };
 
 export function showMenu(root: HTMLElement, deps: MenuDeps): void {
   const save = deps.storage.load();

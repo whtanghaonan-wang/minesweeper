@@ -38,12 +38,12 @@ afterEach(() => {
 });
 
 describe("选关页", () => {
-  it("渲染 10 个关卡，仅第 1 关可玩，其余锁定", () => {
+  it("渲染 20 个关卡，仅第 1 关可玩，其余锁定", () => {
     showMenu(root, { storage: createStorage(memBackend()), onPlay: () => {} });
     const tiles = root.querySelectorAll<HTMLButtonElement>(".level-tile");
-    expect(tiles).toHaveLength(10);
+    expect(tiles).toHaveLength(20);
     expect(tiles[0]!.disabled).toBe(false);
-    for (let i = 1; i < 10; i++) expect(tiles[i]!.disabled).toBe(true);
+    for (let i = 1; i < 20; i++) expect(tiles[i]!.disabled).toBe(true);
   });
 
   it("显示最好成绩并可进入已解锁关卡", () => {
