@@ -5,6 +5,10 @@ import {
   maxScale,
   zoomAt,
   type Metrics,
+  createGestures,
+  MOUSE_SLOP_PX,
+  TOUCH_SLOP_PX,
+  type GestureAction,
 } from "../src/ui/viewport";
 
 const M: Metrics = { viewW: 600, viewH: 800, boardW: 300, boardH: 400 };
@@ -49,5 +53,105 @@ describe("视口数学", () => {
     const m: Metrics = { viewW: 600, viewH: 800, boardW: 300, boardH: 400 }; // fit=2
     expect(zoomAt({ scale: 2, tx: 0, ty: 0 }, m, 0, 0, 0.5).scale).toBe(2); // 不许缩小过 fit
     expect(zoomAt({ scale: 2, tx: 0, ty: 0 }, m, 0, 0, 100).scale).toBe(2); // max=2 封顶
+  });
+});
+
+const types = (as: GestureAction[]): string[] => as.map((a) => a.type);
+
+describe("手势状态机", () => {
+  it("鼠标：位移小于阈值 → 抬起触发 tap(主)", () => {
+    const g = createGestures();
+    expect(g.handle({ type: "down", id: 1, x: 100, y: 100, touch: false, button: 0 })).toEqual([]);
+    expect(g.handle({ type: "move", id: 1, x: 102, y: 101 })).toEqual([]); // < 4px
+    expect(g.handle({ type: "up", id: 1, x: 102, y: 101 })).toEqual([
+      { type: "tap", alt: false, touch: false },
+    ]);
+  });
+
+  it("鼠标：位移超阈值 → 转平移，抬起不触发 tap", () => {
+    const g = createGestures();
+    g.handle({ type: "down", id: 1, x: 100, y: 100, touch: false, button: 0 });
+    const a = g.handle({ type: "move", id: 1, x: 100 + MOUSE_SLOP_PX, y: 100 });
+    expect(a).toEqual([{ type: "pan", dx: MOUSE_SLOP_PX, dy: 0 }]);
+    expect(g.handle({ type: "move", id: 1, x: 110, y: 103 })).toEqual([
+      { type: "pan", dx: 110 - (100 + MOUSE_SLOP_PX), dy: 3 },
+    ]);
+    expect(g.handle({ type: "up", id: 1, x: 110, y: 103 })).toEqual([]);
+  });
+
+  it("鼠标右键：按下立即 tap(次)，随后的移动/抬起无动作", () => {
+    const g = createGestures();
+    expect(g.handle({ type: "down", id: 1, x: 5, y: 5, touch: false, button: 2 })).toEqual([
+      { type: "tap", alt: true, touch: false },
+    ]);
+    expect(g.handle({ type: "move", id: 1, x: 50, y: 50 })).toEqual([]);
+    expect(g.handle({ type: "up", id: 1, x: 50, y: 50 })).toEqual([]);
+    // 冷却结束后恢复正常
+    g.handle({ type: "down", id: 1, x: 0, y: 0, touch: false, button: 0 });
+    expect(types(g.handle({ type: "up", id: 1, x: 0, y: 0 }))).toEqual(["tap"]);
+  });
+
+  it("触摸：按下启动长按计时；小位移点按 → cancelTimer + tap(主)", () => {
+    const g = createGestures();
+    expect(g.handle({ type: "down", id: 1, x: 10, y: 10, touch: true, button: 0 })).toEqual([
+      { type: "startTimer" },
+    ]);
+    expect(g.handle({ type: "up", id: 1, x: 12, y: 10 })).toEqual([
+      { type: "cancelTimer" },
+      { type: "tap", alt: false, touch: true },
+    ]);
+  });
+
+  it("触摸：长按到点 → tap(次)，其后抬起无动作", () => {
+    const g = createGestures();
+    g.handle({ type: "down", id: 1, x: 10, y: 10, touch: true, button: 0 });
+    expect(g.handle({ type: "longpress" })).toEqual([{ type: "tap", alt: true, touch: true }]);
+    expect(g.handle({ type: "up", id: 1, x: 10, y: 10 })).toEqual([]);
+  });
+
+  it("触摸：位移超阈值 → 取消长按并转平移，抬起不点按", () => {
+    const g = createGestures();
+    g.handle({ type: "down", id: 1, x: 10, y: 10, touch: true, button: 0 });
+    const a = g.handle({ type: "move", id: 1, x: 10 + TOUCH_SLOP_PX, y: 10 });
+    expect(a).toEqual([
+      { type: "cancelTimer" },
+      { type: "pan", dx: TOUCH_SLOP_PX, dy: 0 },
+    ]);
+    expect(g.handle({ type: "up", id: 1, x: 40, y: 10 })).toEqual([]);
+    expect(g.handle({ type: "longpress" })).toEqual([]); // 迟到的计时器无害
+  });
+
+  it("双指落下即捏合：取消点按意图，产出 pinch（中点缩放+平移）", () => {
+    const g = createGestures();
+    g.handle({ type: "down", id: 1, x: 100, y: 100, touch: true, button: 0 });
+    expect(g.handle({ type: "down", id: 2, x: 200, y: 100, touch: true, button: 0 })).toEqual([
+      { type: "cancelTimer" },
+    ]); // 起始距离 100，中点 (150,100)
+    const a = g.handle({ type: "move", id: 2, x: 300, y: 100 }); // 距离 200，中点 (200,100)
+    expect(a).toHaveLength(1);
+    const p = a[0] as Extract<GestureAction, { type: "pinch" }>;
+    expect(p.type).toBe("pinch");
+    expect(p.factor).toBeCloseTo(2);
+    expect(p.cx).toBe(200);
+    expect(p.cy).toBe(100);
+    expect(p.dx).toBe(50);
+    expect(p.dy).toBe(0);
+  });
+
+  it("捏合后冷却：先后抬起两指都不触发点按，全部离开后才恢复", () => {
+    const g = createGestures();
+    g.handle({ type: "down", id: 1, x: 100, y: 100, touch: true, button: 0 });
+    g.handle({ type: "down", id: 2, x: 200, y: 100, touch: true, button: 0 });
+    expect(g.handle({ type: "up", id: 2, x: 200, y: 100 })).toEqual([]);
+    expect(g.handle({ type: "up", id: 1, x: 100, y: 100 })).toEqual([]); // 残留指抬起也不点按
+    g.handle({ type: "down", id: 3, x: 10, y: 10, touch: true, button: 0 });
+    expect(types(g.handle({ type: "up", id: 3, x: 10, y: 10 }))).toEqual(["cancelTimer", "tap"]);
+  });
+
+  it("cancel 事件终止当前手势", () => {
+    const g = createGestures();
+    g.handle({ type: "down", id: 1, x: 10, y: 10, touch: true, button: 0 });
+    expect(g.handle({ type: "cancel", id: 1 })).toEqual([{ type: "cancelTimer" }]);
+    expect(g.handle({ type: "longpress" })).toEqual([]);
   });
 });

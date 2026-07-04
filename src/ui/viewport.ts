@@ -46,3 +46,135 @@ export function zoomAt(
   const k = s / v.scale;
   return clampView({ scale: s, tx: px - (px - v.tx) * k, ty: py - (py - v.ty) * k }, m);
 }
+
+// ===== 手势状态机（防误触，v2 设计文档 §2.2）=====
+
+export const MOUSE_SLOP_PX = 4;
+export const TOUCH_SLOP_PX = 10;
+
+export type GestureEvent =
+  | { type: "down"; id: number; x: number; y: number; touch: boolean; button: number }
+  | { type: "move"; id: number; x: number; y: number }
+  | { type: "up"; id: number; x: number; y: number }
+  | { type: "cancel"; id: number }
+  | { type: "longpress" };
+
+export type GestureAction =
+  | { type: "pan"; dx: number; dy: number }
+  | { type: "pinch"; cx: number; cy: number; factor: number; dx: number; dy: number }
+  | { type: "tap"; alt: boolean; touch: boolean }
+  | { type: "startTimer" }
+  | { type: "cancelTimer" };
+
+type Pt = { x: number; y: number };
+type State = "idle" | "maybeTap" | "pan" | "pinch" | "cooldown";
+
+export function createGestures(): { handle(e: GestureEvent): GestureAction[] } {
+  let state: State = "idle";
+  let touch = false;
+  let primaryId = -1;
+  let start: Pt = { x: 0, y: 0 };
+  const held = new Map<number, Pt>(); // 按下中的指针
+  let pinchDist = 0;
+  let pinchMid: Pt = { x: 0, y: 0 };
+
+  const settle = (): void => {
+    state = held.size > 0 ? "cooldown" : "idle";
+  };
+
+  return {
+    handle(e) {
+      const out: GestureAction[] = [];
+      switch (e.type) {
+        case "down": {
+          held.set(e.id, { x: e.x, y: e.y });
+          if (state === "cooldown") break;
+          if (state === "idle") {
+            if (!e.touch && e.button === 2) {
+              out.push({ type: "tap", alt: true, touch: false }); // 右键按下即插旗
+              state = "cooldown";
+              break;
+            }
+            if (!e.touch && e.button !== 0) {
+              state = "cooldown"; // 中键等其它键：无动作
+              break;
+            }
+            state = "maybeTap";
+            touch = e.touch;
+            primaryId = e.id;
+            start = { x: e.x, y: e.y };
+            if (e.touch) out.push({ type: "startTimer" });
+          } else if (touch && (state === "maybeTap" || state === "pan")) {
+            // 第二根手指落下：进入捏合，取消一切点按意图
+            if (state === "maybeTap") out.push({ type: "cancelTimer" });
+            state = "pinch";
+            const [a, b] = [...held.values()];
+            pinchDist = Math.hypot(a!.x - b!.x, a!.y - b!.y);
+            pinchMid = { x: (a!.x + b!.x) / 2, y: (a!.y + b!.y) / 2 };
+          } else {
+            if (state === "maybeTap") out.push({ type: "cancelTimer" });
+            state = "cooldown"; // 鼠标按键并发等异常 → 冷却
+          }
+          break;
+        }
+        case "move": {
+          const prev = held.get(e.id);
+          if (!prev) break;
+          held.set(e.id, { x: e.x, y: e.y });
+          if (state === "maybeTap" && e.id === primaryId) {
+            const slop = touch ? TOUCH_SLOP_PX : MOUSE_SLOP_PX;
+            if (Math.hypot(e.x - start.x, e.y - start.y) >= slop) {
+              if (touch) out.push({ type: "cancelTimer" });
+              state = "pan";
+              out.push({ type: "pan", dx: e.x - prev.x, dy: e.y - prev.y });
+            }
+          } else if (state === "pan" && e.id === primaryId) {
+            out.push({ type: "pan", dx: e.x - prev.x, dy: e.y - prev.y });
+          } else if (state === "pinch") {
+            const [a, b] = [...held.values()];
+            if (!a || !b) break;
+            const dist = Math.hypot(a.x - b.x, a.y - b.y);
+            const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+            out.push({
+              type: "pinch",
+              cx: mid.x,
+              cy: mid.y,
+              factor: pinchDist > 0 ? dist / pinchDist : 1,
+              dx: mid.x - pinchMid.x,
+              dy: mid.y - pinchMid.y,
+            });
+            pinchDist = dist;
+            pinchMid = mid;
+          }
+          break;
+        }
+        case "up": {
+          if (!held.delete(e.id)) break;
+          if (state === "maybeTap" && e.id === primaryId) {
+            if (touch) out.push({ type: "cancelTimer" });
+            out.push({ type: "tap", alt: false, touch });
+            state = "idle";
+          } else {
+            settle(); // pan/pinch/cooldown 抬起：捏合后残留指同样不点按
+          }
+          break;
+        }
+        case "cancel": {
+          if (held.delete(e.id)) {
+            if (state === "maybeTap" && touch) out.push({ type: "cancelTimer" });
+            settle();
+          }
+          break;
+        }
+        case "longpress": {
+          if (state === "maybeTap" && touch) {
+            out.push({ type: "tap", alt: true, touch: true });
+            state = "cooldown"; // 长按已消费，后续抬起不再点按
+          }
+          break;
+        }
+      }
+      return out;
+    },
+  };
+}
