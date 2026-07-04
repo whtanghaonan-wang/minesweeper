@@ -13,7 +13,7 @@ function memBackend(initial?: Record<string, string>) {
 describe("createStorage", () => {
   it("空档返回默认值", () => {
     const s = createStorage(memBackend());
-    expect(s.load()).toEqual({ version: 1, unlockedLevel: 1, bestTimes: {} });
+    expect(s.load()).toEqual({ version: 2, unlockedLevel: 1, bestTimes: {} });
   });
 
   it("recordWin 首次即纪录、更好才更新", () => {
@@ -25,14 +25,14 @@ describe("createStorage", () => {
     expect(s.load().bestTimes[1]).toBe(80);
   });
 
-  it("通关第 N 关解锁 N+1，重复通关不再报解锁，第 10 关不解锁 11", () => {
+  it("第 20 关不解锁 21", () => {
     const s = createStorage(memBackend());
     expect(s.recordWin(1, 60).unlocked).toBe(2);
     expect(s.load().unlockedLevel).toBe(2);
     expect(s.recordWin(1, 50).unlocked).toBe(null);
-    for (let l = 2; l <= 9; l++) expect(s.recordWin(l, 60).unlocked).toBe(l + 1);
-    expect(s.recordWin(10, 60).unlocked).toBe(null);
-    expect(s.load().unlockedLevel).toBe(10);
+    for (let l = 2; l <= 19; l++) expect(s.recordWin(l, 60).unlocked).toBe(l + 1);
+    expect(s.recordWin(20, 60).unlocked).toBe(null);
+    expect(s.load().unlockedLevel).toBe(20);
   });
 
   it("存档在 backend 中持久化，新实例可读回", () => {
@@ -45,7 +45,7 @@ describe("createStorage", () => {
 
   it("损坏 JSON / 版本不符 / 非法字段回退默认", () => {
     expect(createStorage(memBackend({ [SAVE_KEY]: "{oops" })).load()).toEqual({
-      version: 1,
+      version: 2,
       unlockedLevel: 1,
       bestTimes: {},
     });
@@ -55,7 +55,7 @@ describe("createStorage", () => {
     ).toBe(1);
     const s = createStorage(
       memBackend({
-        [SAVE_KEY]: '{"version":1,"unlockedLevel":"abc","bestTimes":{"1":77,"2":"bad"}}',
+        [SAVE_KEY]: '{"version":2,"unlockedLevel":"abc","bestTimes":{"1":77,"2":"bad"}}',
       }),
     );
     expect(s.load().unlockedLevel).toBe(1); // 损坏项回退
@@ -71,7 +71,7 @@ describe("createStorage", () => {
         throw new Error("nope");
       },
     });
-    expect(s.load()).toEqual({ version: 1, unlockedLevel: 1, bestTimes: {} });
+    expect(s.load()).toEqual({ version: 2, unlockedLevel: 1, bestTimes: {} });
     const r = s.recordWin(1, 55);
     expect(r.newBest).toBe(true);
     expect(r.persisted).toBe(false);
@@ -82,5 +82,31 @@ describe("createStorage", () => {
     const s = createStorage(undefined);
     expect(s.recordWin(3, 42).persisted).toBe(false);
     expect(s.load().bestTimes[3]).toBe(42);
+  });
+
+  it("v1 存档迁移：进度继承，成绩仅保留规格未变的第 1、2 关，且立即持久化", () => {
+    const backend = memBackend({
+      [SAVE_KEY]: JSON.stringify({
+        version: 1,
+        unlockedLevel: 7,
+        bestTimes: { 1: 55, 2: 66, 3: 77, 9: 99, 10: 111 },
+      }),
+    });
+    const s = createStorage(backend);
+    expect(s.load()).toEqual({ version: 2, unlockedLevel: 7, bestTimes: { 1: 55, 2: 66 } });
+    expect(JSON.parse(backend.map.get(SAVE_KEY)!)).toEqual({
+      version: 2,
+      unlockedLevel: 7,
+      bestTimes: { 1: 55, 2: 66 },
+    });
+  });
+
+  it("v1 存档字段损坏时按同样规则回退后再迁移", () => {
+    const s = createStorage(
+      memBackend({
+        [SAVE_KEY]: '{"version":1,"unlockedLevel":"abc","bestTimes":{"2":88,"5":"bad"}}',
+      }),
+    );
+    expect(s.load()).toEqual({ version: 2, unlockedLevel: 1, bestTimes: { 2: 88 } });
   });
 });
