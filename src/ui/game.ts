@@ -10,6 +10,16 @@ import { generate } from "../core/generator";
 import { TIER_NAMES, type LevelSpec } from "../core/levels";
 import { mulberry32 } from "../core/rng";
 import { fmtTime } from "./format";
+import {
+  BASE_CELL_PX,
+  clampView,
+  createGestures,
+  fitScale,
+  zoomAt,
+  type GestureAction,
+  type Metrics,
+  type ViewState,
+} from "./viewport";
 
 export interface GameResult {
   won: boolean;
@@ -29,6 +39,9 @@ const LONG_PRESS_MS = 350;
 const CASCADE_STEP_MS = 12;
 const CASCADE_MAX_MS = 240;
 const FINISH_PAUSE_MS = 700;
+const BOARD_PAD = 10;
+const CELL_GAP = 3;
+const WHEEL_STEP = 1.15;
 
 export function showGame(root: HTMLElement, deps: GameDeps): void {
   const { level } = deps;
@@ -65,13 +78,16 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   stats.append(mineStat, timeStat);
   top.append(backBtn, title, stats);
 
-  const boardWrap = document.createElement("div");
-  boardWrap.className = "board-wrap";
+  const boardVp = document.createElement("div");
+  boardVp.className = "board-viewport";
   const boardEl = document.createElement("div");
   boardEl.className = "board";
   boardEl.style.setProperty("--w", String(w));
-  boardEl.style.setProperty("--h", String(h));
-  boardWrap.appendChild(boardEl);
+  const boardW = BOARD_PAD * 2 + w * BASE_CELL_PX + (w - 1) * CELL_GAP;
+  const boardH = BOARD_PAD * 2 + h * BASE_CELL_PX + (h - 1) * CELL_GAP;
+  boardEl.style.width = `${boardW}px`;
+  boardEl.style.height = `${boardH}px`;
+  boardVp.appendChild(boardEl);
 
   const cells: HTMLButtonElement[] = [];
   for (let i = 0; i < size; i++) {
@@ -95,51 +111,145 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   const restartBtn = button("pill restart", "↻ 重开", restart);
   bottom.append(modeToggle, restartBtn);
 
-  game.append(top, boardWrap, bottom);
+  game.append(top, boardVp, bottom);
   root.replaceChildren(game);
 
   updateStats();
   updateTimeDisplay(level.timeLimitSec);
 
-  // ===== 输入 =====
-  let pressTimer: ReturnType<typeof setTimeout> | null = null;
-  let longPressed = false;
+  // ===== 视口（缩放/平移）=====
+  let view: ViewState = { scale: 1, tx: 0, ty: 0 };
+  let lastFit = 1;
 
-  boardEl.addEventListener("contextmenu", (e) => e.preventDefault());
+  function metrics(): Metrics {
+    return { viewW: boardVp.clientWidth, viewH: boardVp.clientHeight, boardW, boardH };
+  }
 
-  boardEl.addEventListener("pointerdown", (e) => {
-    const i = cellIndex(e.target);
-    if (i === null || finished) return;
-    if (e.pointerType === "mouse") {
-      if (e.button === 2) act(i, "flag");
-      else if (e.button === 0) act(i, "dig");
+  function applyView(): void {
+    boardEl.style.transform = `translate(${view.tx}px, ${view.ty}px) scale(${view.scale})`;
+  }
+
+  function refit(): void {
+    const m = metrics();
+    lastFit = fitScale(m);
+    view = clampView({ scale: lastFit, tx: 0, ty: 0 }, m);
+    applyView();
+  }
+
+  function onResize(): void {
+    if (!game.isConnected) {
+      window.removeEventListener("resize", onResize); // 页面已被替换，自清理
       return;
     }
-    // 触摸：长按执行另一模式
-    longPressed = false;
-    pressTimer = setTimeout(() => {
-      longPressed = true;
-      navigator.vibrate?.(10);
-      act(i, mode === "dig" ? "flag" : "dig");
-    }, LONG_PRESS_MS);
-  });
+    const m = metrics();
+    const wasFit = Math.abs(view.scale - lastFit) < 1e-3;
+    lastFit = fitScale(m);
+    view = wasFit
+      ? clampView({ scale: lastFit, tx: 0, ty: 0 }, m)
+      : clampView({ ...view, scale: zoomAt(view, m, 0, 0, 1).scale }, m);
+    applyView();
+  }
 
-  boardEl.addEventListener("pointerup", (e) => {
-    const i = cellIndex(e.target);
-    clearPress();
-    if (i === null || finished || e.pointerType === "mouse") return;
-    if (!longPressed) act(i, mode);
-  });
+  refit(); // jsdom 下尺寸为 0，fitScale 回退 1，保持确定性
+  requestAnimationFrame(refit); // 真实浏览器等布局完成后精确适配
+  window.addEventListener("resize", onResize);
 
-  boardEl.addEventListener("pointercancel", clearPress);
-  boardEl.addEventListener("pointerleave", clearPress, true);
+  // ===== 输入：手势状态机接线 =====
+  const gestures = createGestures();
+  let longTimer: ReturnType<typeof setTimeout> | null = null;
+  let downCellVi: number | null = null; // 手势起点所在格（视觉索引）
 
-  function clearPress(): void {
-    if (pressTimer !== null) {
-      clearTimeout(pressTimer);
-      pressTimer = null;
+  boardVp.addEventListener("contextmenu", (e) => e.preventDefault());
+
+  function vpPoint(e: MouseEvent): { x: number; y: number } {
+    const r = boardVp.getBoundingClientRect();
+    return { x: e.clientX - r.left, y: e.clientY - r.top };
+  }
+
+  function pid(e: Event): number {
+    return (e as PointerEvent).pointerId ?? 0;
+  }
+
+  function isTouch(e: Event): boolean {
+    return (e as PointerEvent).pointerType !== "mouse";
+  }
+
+  function run(actions: GestureAction[]): void {
+    for (const a of actions) {
+      switch (a.type) {
+        case "pan": {
+          view = clampView({ scale: view.scale, tx: view.tx + a.dx, ty: view.ty + a.dy }, metrics());
+          applyView();
+          break;
+        }
+        case "pinch": {
+          const m = metrics();
+          view = zoomAt(view, m, a.cx, a.cy, a.factor);
+          view = clampView({ scale: view.scale, tx: view.tx + a.dx, ty: view.ty + a.dy }, m);
+          applyView();
+          break;
+        }
+        case "tap": {
+          if (downCellVi === null || finished) break;
+          const action: Mode = a.touch
+            ? a.alt
+              ? mode === "dig"
+                ? "flag"
+                : "dig"
+              : mode
+            : a.alt
+              ? "flag"
+              : "dig";
+          if (a.touch && a.alt) navigator.vibrate?.(10);
+          act(downCellVi, action);
+          break;
+        }
+        case "startTimer": {
+          longTimer = setTimeout(() => run(gestures.handle({ type: "longpress" })), LONG_PRESS_MS);
+          break;
+        }
+        case "cancelTimer": {
+          if (longTimer !== null) {
+            clearTimeout(longTimer);
+            longTimer = null;
+          }
+          break;
+        }
+      }
     }
   }
+
+  boardVp.addEventListener("pointerdown", (e) => {
+    downCellVi = cellIndex(e.target);
+    boardVp.setPointerCapture?.(pid(e));
+    const p = vpPoint(e);
+    run(gestures.handle({ type: "down", id: pid(e), x: p.x, y: p.y, touch: isTouch(e), button: e.button }));
+  });
+
+  boardVp.addEventListener("pointermove", (e) => {
+    const p = vpPoint(e);
+    run(gestures.handle({ type: "move", id: pid(e), x: p.x, y: p.y }));
+  });
+
+  boardVp.addEventListener("pointerup", (e) => {
+    const p = vpPoint(e);
+    run(gestures.handle({ type: "up", id: pid(e), x: p.x, y: p.y }));
+  });
+
+  boardVp.addEventListener("pointercancel", (e) => {
+    run(gestures.handle({ type: "cancel", id: pid(e) }));
+  });
+
+  boardVp.addEventListener(
+    "wheel",
+    (e) => {
+      e.preventDefault();
+      const p = vpPoint(e);
+      view = zoomAt(view, metrics(), p.x, p.y, e.deltaY < 0 ? WHEEL_STEP : 1 / WHEEL_STEP);
+      applyView();
+    },
+    { passive: false },
+  );
 
   function cellIndex(target: EventTarget | null): number | null {
     if (!(target instanceof HTMLElement)) return null;
@@ -252,11 +362,13 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   function exit(): void {
     stopTimer();
     finished = true;
+    window.removeEventListener("resize", onResize);
     deps.onExit();
   }
 
   function restart(): void {
     stopTimer();
+    window.removeEventListener("resize", onResize);
     showGame(root, deps);
   }
 

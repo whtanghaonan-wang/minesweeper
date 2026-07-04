@@ -294,25 +294,23 @@ button.pill:active {
 }
 
 /* ===== 棋盘 ===== */
-.board-wrap {
+.board-viewport {
   flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  position: relative;
+  overflow: hidden;
   min-height: 0;
+  touch-action: none;
 }
 
 .board {
-  --gap: 3px;
-  --cell-size: min(
-    (100vw - 36px - (var(--w) - 1) * var(--gap)) / var(--w),
-    (100dvh - 190px - (var(--h) - 1) * var(--gap)) / var(--h),
-    42px
-  );
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
   display: grid;
-  grid-template-columns: repeat(var(--w), var(--cell-size));
-  grid-auto-rows: var(--cell-size);
-  gap: var(--gap);
+  grid-template-columns: repeat(var(--w), 40px);
+  grid-auto-rows: 40px;
+  gap: 3px;
   padding: 10px;
   background: var(--card);
   border-radius: var(--r-card);
@@ -330,7 +328,7 @@ button.pill:active {
     inset 0 -2px 0 rgba(74, 69, 62, 0.07);
   font-family: var(--font-num);
   font-weight: 700;
-  font-size: calc(var(--cell-size) * 0.48);
+  font-size: 19px;
   line-height: 1;
   display: flex;
   align-items: center;
@@ -373,7 +371,7 @@ button.pill:active {
 .cell.mine-shown,
 .cell.boom,
 .cell.wrong {
-  font-size: calc(var(--cell-size) * 0.52);
+  font-size: 21px;
 }
 
 .cell.boom {
