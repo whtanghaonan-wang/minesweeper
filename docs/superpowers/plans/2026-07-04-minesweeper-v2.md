@@ -491,12 +491,15 @@ describe("视口数学", () => {
   });
 
   it("zoomAt 不动点：缩放后指针下的盘面点不变", () => {
-    const v0 = { scale: 2, tx: 0, ty: 0 };
-    const m: Metrics = { viewW: 600, viewH: 800, boardW: 400, boardH: 500 };
+    // fit = min(600/800, 800/1000) = 0.75，max = max(0.75, 64/40) = 1.6
+    // 起点与目标 scale 都取区间 (fit, max) 内、且远离平移钳制边界的内点，不动点性质才严格成立
+    const m: Metrics = { viewW: 600, viewH: 800, boardW: 800, boardH: 1000 };
+    const v0 = { scale: 1.2, tx: -100, ty: -50 };
     const v1 = zoomAt(v0, m, 100, 100, 1.25);
-    // 盘面点 p = (px - tx)/s 应保持: (100-0)/2 = 50 → (100 - v1.tx)/v1.scale = 50
-    expect(v1.scale).toBeCloseTo(2.5);
-    expect((100 - v1.tx) / v1.scale).toBeCloseTo(50);
+    expect(v1.scale).toBeCloseTo(1.5);
+    // 盘面点 p = (px - tx)/s 缩放前后不变
+    expect((100 - v1.tx) / v1.scale).toBeCloseTo((100 - v0.tx) / v0.scale);
+    expect((100 - v1.ty) / v1.scale).toBeCloseTo((100 - v0.ty) / v0.scale);
   });
 
   it("zoomAt 缩放范围被钳制在 [fitScale, maxScale]", () => {
