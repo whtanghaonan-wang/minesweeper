@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "minesweeper",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "identifier": "io.github.whtanghaonan.minesweeper",
   "build": {
     "frontendDist": "../dist",
@@ -13,10 +13,10 @@
     "windows": [
       {
         "title": "扫雷",
-        "width": 480,
-        "height": 760,
-        "minWidth": 400,
-        "minHeight": 600,
+        "width": 1100,
+        "height": 800,
+        "minWidth": 640,
+        "minHeight": 560,
         "center": true,
         "resizable": true,
         "fullscreen": false
