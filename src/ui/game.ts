@@ -340,6 +340,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   function win(): void {
     finished = true;
     stopTimer();
+    window.removeEventListener("resize", onResize);
     const b = board!;
     for (let li = 0; li < size; li++) if (b.mine[li] && !b.flagged[li]) toggleFlag(b, li);
     syncAll();
@@ -352,6 +353,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     if (finished) return;
     finished = true;
     stopTimer();
+    window.removeEventListener("resize", onResize);
     const b = board;
     if (b) {
       for (let li = 0; li < size; li++) {
@@ -382,6 +384,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   }
 
   function restart(): void {
+    finished = true;
     stopTimer();
     window.removeEventListener("resize", onResize);
     showGame(root, deps);
