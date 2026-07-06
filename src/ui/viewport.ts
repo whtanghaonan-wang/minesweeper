@@ -16,6 +16,33 @@ export interface Metrics {
 export const BASE_CELL_PX = 40;
 export const MAX_CELL_PX = 64;
 
+export const BOARD_PAD = 10;
+export const CELL_GAP = 3;
+const PITCH = BASE_CELL_PX + CELL_GAP;
+const SNAP_PX = 2; // 缝隙/边缘吸附容差(盘面坐标系)
+
+/** 视口坐标 → 视觉格索引:格内直接命中;缝隙与边缘 ≤SNAP_PX 吸附最近格;其余 null(留给平移)。
+ *  缝宽 3 < 2×SNAP_PX+1,任何缝隙点必然吸附,命中死区为零(v2.1 设计文档 §1.2) */
+export function hitCell(
+  px: number,
+  py: number,
+  v: ViewState,
+  cols: number,
+  rows: number,
+): number | null {
+  const col = nearestIndex((px - v.tx) / v.scale - BOARD_PAD, cols);
+  const row = nearestIndex((py - v.ty) / v.scale - BOARD_PAD, rows);
+  if (col === null || row === null) return null;
+  return row * cols + col;
+}
+
+function nearestIndex(z: number, count: number): number | null {
+  const i = Math.min(count - 1, Math.max(0, Math.floor(z / PITCH)));
+  if (z >= i * PITCH - SNAP_PX && z <= i * PITCH + BASE_CELL_PX + SNAP_PX) return i;
+  if (i + 1 < count && (i + 1) * PITCH - z <= SNAP_PX) return i + 1;
+  return null;
+}
+
 export function fitScale(m: Metrics): number {
   if (m.viewW <= 0 || m.viewH <= 0 || m.boardW <= 0 || m.boardH <= 0) return 1;
   return Math.min(m.viewW / m.boardW, m.viewH / m.boardH);
@@ -49,7 +76,7 @@ export function zoomAt(
 
 // ===== 手势状态机（防误触，v2 设计文档 §2.2）=====
 
-export const MOUSE_SLOP_PX = 4;
+export const MOUSE_SLOP_PX = 8;
 export const TOUCH_SLOP_PX = 10;
 
 export type GestureEvent =

@@ -9,6 +9,7 @@ import {
   MOUSE_SLOP_PX,
   TOUCH_SLOP_PX,
   type GestureAction,
+  hitCell,
 } from "../src/ui/viewport";
 
 const M: Metrics = { viewW: 600, viewH: 800, boardW: 300, boardH: 400 };
@@ -153,5 +154,49 @@ describe("手势状态机", () => {
     g.handle({ type: "down", id: 1, x: 10, y: 10, touch: true, button: 0 });
     expect(g.handle({ type: "cancel", id: 1 })).toEqual([{ type: "cancelTimer" }]);
     expect(g.handle({ type: "longpress" })).toEqual([]);
+  });
+
+  it("鼠标:7px 位移仍是点按(阈值 8px)", () => {
+    const g = createGestures();
+    g.handle({ type: "down", id: 1, x: 100, y: 100, touch: false, button: 0 });
+    expect(g.handle({ type: "move", id: 1, x: 107, y: 100 })).toEqual([]);
+    expect(types(g.handle({ type: "up", id: 1, x: 107, y: 100 }))).toEqual(["tap"]);
+  });
+});
+
+describe("hitCell 几何吸附(v2.1 规格 §1.2)", () => {
+  const V = { scale: 1, tx: 0, ty: 0 };
+  // 棋盘坐标:内边距 10,格 40,缝 3,栅距 43
+
+  it("格内命中:行列换算正确", () => {
+    expect(hitCell(30, 30, V, 8, 8)).toBe(0); // 盘面(20,20) ∈ 格(0,0)
+    expect(hitCell(10 + 43 + 20, 10 + 2 * 43 + 20, V, 8, 8)).toBe(17); // 列1行2
+    expect(hitCell(10 + 7 * 43 + 39, 10 + 7 * 43 + 39, V, 8, 8)).toBe(63); // 末格右下角
+  });
+
+  it("缝隙吸附:距哪格近归哪格(缝宽 3 全覆盖)", () => {
+    expect(hitCell(51.5, 30, V, 8, 8)).toBe(0); // 盘面 x=41.5,距格0右缘 1.5
+    expect(hitCell(52.6, 30, V, 8, 8)).toBe(1); // 盘面 x=42.6,距格1左缘 0.4
+    expect(hitCell(30, 51.5, V, 8, 8)).toBe(0); // 纵向缝隙同理
+  });
+
+  it("边距吸附 ≤2px,更深处返回 null", () => {
+    expect(hitCell(9, 30, V, 8, 8)).toBe(0); // 盘面 x=-1,吸附首列
+    expect(hitCell(7, 30, V, 8, 8)).toBeNull(); // 盘面 x=-3,超容差
+    const right = 10 + 7 * 43 + 40; // 末列右缘的视口 x=351
+    expect(hitCell(right + 2, 30, V, 8, 8)).toBe(7);
+    expect(hitCell(right + 3, 30, V, 8, 8)).toBeNull();
+  });
+
+  it("缩放/平移变换下反算正确", () => {
+    // 盘面点(30,30)=格0中心,view scale2 tx-40 ty-40 → 视口(20,20)
+    expect(hitCell(20, 20, { scale: 2, tx: -40, ty: -40 }, 8, 8)).toBe(0);
+    // 同一视口点在未平移 scale2 下 → 盘面坐标 x=20/2-10=0,恰在格0左缘(格内命中)
+    expect(hitCell(20, 20, { scale: 2, tx: 0, ty: 0 }, 8, 8)).toBe(0);
+  });
+
+  it("完全界外返回 null", () => {
+    expect(hitCell(-50, 30, V, 8, 8)).toBeNull();
+    expect(hitCell(30, 9999, V, 8, 8)).toBeNull();
   });
 });
