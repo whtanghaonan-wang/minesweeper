@@ -20,7 +20,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps): void {
 
   const head = document.createElement("header");
   head.className = "menu-head";
-  head.innerHTML = `<h1>扫雷</h1><p class="menu-sub">无猜 · 二十关 · 五档</p>`;
+  head.innerHTML = `<h1>扫雷</h1><p class="menu-sub">无猜 · 五十关 · 十档</p>`;
   menu.appendChild(head);
 
   if (deps.persistWarning) {

@@ -9,6 +9,11 @@
   --hard: #d98880;
   --expert: #9b8fc4;
   --abyss: #7a9cc4;
+  --inferno: #c4766a;
+  --umbra: #6ba3a0;
+  --void: #7a7fc4;
+  --chaos: #b87aa8;
+  --finale: #6e6a80;
 
   --cell: #e6e1d6;
   --cell-open: #faf8f4;
@@ -142,6 +147,21 @@ button:focus-visible {
 }
 .tier-abyss {
   --tier-color: var(--abyss);
+}
+.tier-inferno {
+  --tier-color: var(--inferno);
+}
+.tier-umbra {
+  --tier-color: var(--umbra);
+}
+.tier-void {
+  --tier-color: var(--void);
+}
+.tier-chaos {
+  --tier-color: var(--chaos);
+}
+.tier-finale {
+  --tier-color: var(--finale);
 }
 
 /* ===== 藤蔓选关 ===== */

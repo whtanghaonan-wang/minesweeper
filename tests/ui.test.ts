@@ -45,18 +45,18 @@ afterEach(() => {
 });
 
 describe("选关页", () => {
-  it("渲染 20 个藤蔓节点，仅第 1 关可玩，其余锁定", () => {
+  it("渲染 50 个藤蔓节点，仅第 1 关可玩，其余锁定", () => {
     showMenu(root, { storage: createStorage(memBackend()), onPlay: () => {} });
     const nodes = root.querySelectorAll<HTMLButtonElement>(".vine-node");
-    expect(nodes).toHaveLength(20);
+    expect(nodes).toHaveLength(50);
     expect(nodes[0]!.disabled).toBe(false);
     expect(nodes[0]!.classList.contains("current")).toBe(true);
-    for (let i = 1; i < 20; i++) {
+    for (let i = 1; i < 50; i++) {
       expect(nodes[i]!.disabled).toBe(true);
       expect(nodes[i]!.classList.contains("locked")).toBe(true);
     }
-    expect(root.querySelector(".menu-sub")!.textContent).toContain("二十关");
-    expect(root.querySelectorAll(".vine-svg polyline").length).toBeGreaterThanOrEqual(6); // 底线+5 档色带
+    expect(root.querySelector(".menu-sub")!.textContent).toContain("五十关");
+    expect(root.querySelectorAll(".vine-svg polyline").length).toBeGreaterThanOrEqual(11); // 底线+10 档色带
   });
 
   it("显示最好成绩、当前关高亮并自动滚动定位、可进入已解锁关", () => {

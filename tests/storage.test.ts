@@ -25,14 +25,14 @@ describe("createStorage", () => {
     expect(s.load().bestTimes[1]).toBe(80);
   });
 
-  it("第 20 关不解锁 21", () => {
+  it("第 50 关不解锁 51", () => {
     const s = createStorage(memBackend());
     expect(s.recordWin(1, 60).unlocked).toBe(2);
     expect(s.load().unlockedLevel).toBe(2);
     expect(s.recordWin(1, 50).unlocked).toBe(null);
-    for (let l = 2; l <= 19; l++) expect(s.recordWin(l, 60).unlocked).toBe(l + 1);
-    expect(s.recordWin(20, 60).unlocked).toBe(null);
-    expect(s.load().unlockedLevel).toBe(20);
+    for (let l = 2; l <= 49; l++) expect(s.recordWin(l, 60).unlocked).toBe(l + 1);
+    expect(s.recordWin(50, 60).unlocked).toBe(null);
+    expect(s.load().unlockedLevel).toBe(50);
   });
 
   it("存档在 backend 中持久化，新实例可读回", () => {

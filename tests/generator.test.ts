@@ -31,20 +31,25 @@ const SPEC_TABLE: [number, Tier, number, number, number, number][] = [
 ];
 
 describe("LEVELS", () => {
-  it("20 关配置与设计文档一致", () => {
-    expect(LEVELS).toHaveLength(20);
+  it("前 20 关配置与 v2 设计文档一致(逐字节锁定)", () => {
+    expect(LEVELS).toHaveLength(50);
     SPEC_TABLE.forEach(([id, tier, width, height, mines, timeLimitSec], i) => {
       expect(LEVELS[i]).toEqual({ id, tier, width, height, mines, timeLimitSec });
     });
   });
 
-  it("五档名称齐全", () => {
+  it("十档名称齐全", () => {
     expect(TIER_NAMES).toEqual({
       easy: "简单",
       challenge: "挑战",
       hard: "困难",
       expert: "专家",
       abyss: "深渊",
+      inferno: "炼狱",
+      umbra: "幽冥",
+      void: "虚空",
+      chaos: "混沌",
+      finale: "终焉",
     });
   });
 });
@@ -56,6 +61,11 @@ describe("generate", () => {
     hard: [1, 2, 3],
     expert: [1, 2],
     abyss: [1, 2],
+    inferno: [1, 2],
+    umbra: [1, 2],
+    void: [1],
+    chaos: [1],
+    finale: [1],
   };
 
   for (const level of LEVELS) {

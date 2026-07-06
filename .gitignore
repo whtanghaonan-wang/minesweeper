@@ -6,3 +6,5 @@ src-tauri/target/
 .superpowers/
 /app.exe
 /uninstall.exe
+gen-stats.tmp.txt
+gen-bench.tmp.txt
