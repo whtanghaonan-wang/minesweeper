@@ -13,7 +13,7 @@ function memBackend(initial?: Record<string, string>) {
 describe("createStorage", () => {
   it("空档返回默认值", () => {
     const s = createStorage(memBackend());
-    expect(s.load()).toEqual({ version: 2, unlockedLevel: 1, bestTimes: {} });
+    expect(s.load()).toEqual({ version: 2, unlockedLevel: 1, bestTimes: {}, soundOn: true });
   });
 
   it("recordWin 首次即纪录、更好才更新", () => {
@@ -48,6 +48,7 @@ describe("createStorage", () => {
       version: 2,
       unlockedLevel: 1,
       bestTimes: {},
+      soundOn: true,
     });
     expect(
       createStorage(memBackend({ [SAVE_KEY]: '{"version":99,"unlockedLevel":5,"bestTimes":{}}' })).load()
@@ -71,7 +72,7 @@ describe("createStorage", () => {
         throw new Error("nope");
       },
     });
-    expect(s.load()).toEqual({ version: 2, unlockedLevel: 1, bestTimes: {} });
+    expect(s.load()).toEqual({ version: 2, unlockedLevel: 1, bestTimes: {}, soundOn: true });
     const r = s.recordWin(1, 55);
     expect(r.newBest).toBe(true);
     expect(r.persisted).toBe(false);
@@ -93,11 +94,17 @@ describe("createStorage", () => {
       }),
     });
     const s = createStorage(backend);
-    expect(s.load()).toEqual({ version: 2, unlockedLevel: 7, bestTimes: { 1: 55, 2: 66 } });
+    expect(s.load()).toEqual({
+      version: 2,
+      unlockedLevel: 7,
+      bestTimes: { 1: 55, 2: 66 },
+      soundOn: true,
+    });
     expect(JSON.parse(backend.map.get(SAVE_KEY)!)).toEqual({
       version: 2,
       unlockedLevel: 7,
       bestTimes: { 1: 55, 2: 66 },
+      soundOn: true,
     });
   });
 
@@ -107,6 +114,48 @@ describe("createStorage", () => {
         [SAVE_KEY]: '{"version":1,"unlockedLevel":"abc","bestTimes":{"2":88,"5":"bad"}}',
       }),
     );
-    expect(s.load()).toEqual({ version: 2, unlockedLevel: 1, bestTimes: { 2: 88 } });
+    expect(s.load()).toEqual({ version: 2, unlockedLevel: 1, bestTimes: { 2: 88 }, soundOn: true });
+  });
+});
+
+describe("soundOn 音效开关持久化(v2.1)", () => {
+  it("缺省为 true(老 v2 档无此字段也回 true)", () => {
+    expect(createStorage(memBackend()).load().soundOn).toBe(true);
+    const old = memBackend({
+      [SAVE_KEY]: '{"version":2,"unlockedLevel":3,"bestTimes":{"1":50}}',
+    });
+    const s = createStorage(old);
+    expect(s.load().soundOn).toBe(true);
+    expect(s.load().unlockedLevel).toBe(3);
+  });
+
+  it("setSoundOn 持久化,新实例读回;非法值回退 true", () => {
+    const backend = memBackend();
+    const s = createStorage(backend);
+    expect(s.setSoundOn(false)).toBe(true);
+    expect(s.load().soundOn).toBe(false);
+    expect(createStorage(backend).load().soundOn).toBe(false);
+    const bad = createStorage(
+      memBackend({ [SAVE_KEY]: '{"version":2,"unlockedLevel":1,"bestTimes":{},"soundOn":"yes"}' }),
+    );
+    expect(bad.load().soundOn).toBe(true);
+  });
+
+  it("setSoundOn 不动进度与成绩;recordWin 不动 soundOn", () => {
+    const backend = memBackend();
+    const s = createStorage(backend);
+    s.recordWin(1, 77);
+    s.setSoundOn(false);
+    expect(s.load().bestTimes[1]).toBe(77);
+    expect(s.load().unlockedLevel).toBe(2);
+    s.recordWin(2, 88);
+    expect(s.load().soundOn).toBe(false);
+  });
+
+  it("v1 迁移后 soundOn 为 true", () => {
+    const s = createStorage(
+      memBackend({ [SAVE_KEY]: '{"version":1,"unlockedLevel":5,"bestTimes":{"1":60}}' }),
+    );
+    expect(s.load().soundOn).toBe(true);
   });
 });

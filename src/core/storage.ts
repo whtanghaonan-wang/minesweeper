@@ -6,6 +6,7 @@ export interface SaveData {
   version: 2;
   unlockedLevel: number;
   bestTimes: Record<number, number>;
+  soundOn: boolean;
 }
 
 export interface WinRecord {
@@ -18,6 +19,7 @@ export interface GameStorage {
   load(): SaveData;
   save(d: SaveData): boolean;
   recordWin(levelId: number, timeSec: number): WinRecord;
+  setSoundOn(on: boolean): boolean;
 }
 
 type Backend = Pick<globalThis.Storage, "getItem" | "setItem">;
@@ -39,7 +41,7 @@ const V1_SPECS: Record<number, [number, number, number]> = {
 };
 
 function defaults(): SaveData {
-  return { version: 2, unlockedLevel: 1, bestTimes: {} };
+  return { version: 2, unlockedLevel: 1, bestTimes: {}, soundOn: true };
 }
 
 /** 逐项校验 unlockedLevel/bestTimes，损坏字段回退默认、合法字段保留 */
@@ -61,6 +63,7 @@ function readFields(r: Record<string, unknown>): SaveData {
       }
     }
   }
+  if (typeof r["soundOn"] === "boolean") d.soundOn = r["soundOn"];
   return d;
 }
 
@@ -127,6 +130,9 @@ export function createStorage(backend?: Backend): GameStorage {
       }
       const persisted = save(d);
       return { newBest, unlocked, persisted };
+    },
+    setSoundOn(on) {
+      return save({ ...data, bestTimes: { ...data.bestTimes }, soundOn: on });
     },
   };
 }
