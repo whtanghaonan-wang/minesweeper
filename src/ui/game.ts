@@ -12,9 +12,12 @@ import { mulberry32 } from "../core/rng";
 import { fmtTime } from "./format";
 import {
   BASE_CELL_PX,
+  BOARD_PAD,
+  CELL_GAP,
   clampView,
   createGestures,
   fitScale,
+  hitCell,
   zoomAt,
   type GestureAction,
   type Metrics,
@@ -39,8 +42,6 @@ const LONG_PRESS_MS = 350;
 const CASCADE_STEP_MS = 12;
 const CASCADE_MAX_MS = 240;
 const FINISH_PAUSE_MS = 700;
-const BOARD_PAD = 10;
-const CELL_GAP = 3;
 const WHEEL_STEP = 1.15;
 
 export function showGame(root: HTMLElement, deps: GameDeps): void {
@@ -224,9 +225,9 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   }
 
   boardVp.addEventListener("pointerdown", (e) => {
-    downCellVi = cellIndex(e.target);
-    boardVp.setPointerCapture?.(pid(e));
     const p = vpPoint(e);
+    downCellVi = hitCell(p.x, p.y, view, w, h);
+    boardVp.setPointerCapture?.(pid(e));
     run(gestures.handle({ type: "down", id: pid(e), x: p.x, y: p.y, touch: isTouch(e), button: e.button }));
   });
 
@@ -254,12 +255,6 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     },
     { passive: false },
   );
-
-  function cellIndex(target: EventTarget | null): number | null {
-    if (!(target instanceof HTMLElement)) return null;
-    const v = target.closest<HTMLElement>(".cell")?.dataset["i"];
-    return v === undefined ? null : Number(v);
-  }
 
   // ===== 动作 =====
   function act(i: number, action: Mode): void {

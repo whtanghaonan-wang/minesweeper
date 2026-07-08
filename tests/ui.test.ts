@@ -21,17 +21,27 @@ function memBackend() {
   };
 }
 
-/** 模拟一次完整点按/拖动：down →(可选 move)→ up。jsdom 无 PointerEvent，用 MouseEvent 冒充 */
-function press(el: Element, opts: { button?: number; dx?: number; dy?: number; touch?: boolean } = {}): void {
+/** 模拟一次完整点按/拖动：down →(可选 move)→ up。jsdom 无 PointerEvent，用 MouseEvent 冒充。
+ *  v2.1 起命中按坐标几何计算，坐标从 data-i 反推（8×8 竖屏，内边距10 栅距43 格心+20） */
+const GRID_W = 8;
+function cellPoint(el: Element): { x: number; y: number } {
+  const i = Number((el as HTMLElement).dataset["i"]);
+  return { x: 10 + (i % GRID_W) * 43 + 20, y: 10 + Math.floor(i / GRID_W) * 43 + 20 };
+}
+function press(
+  el: Element,
+  opts: { button?: number; dx?: number; dy?: number; touch?: boolean } = {},
+): void {
   const { button = 0, dx = 0, dy = 0, touch = false } = opts;
+  const p = cellPoint(el);
   const fire = (type: string, x: number, y: number): void => {
     const e = new MouseEvent(type, { bubbles: true, button, clientX: x, clientY: y });
     Object.defineProperty(e, "pointerType", { value: touch ? "touch" : "mouse" });
     el.dispatchEvent(e);
   };
-  fire("pointerdown", 100, 100);
-  if (dx !== 0 || dy !== 0) fire("pointermove", 100 + dx, 100 + dy);
-  fire("pointerup", 100 + dx, 100 + dy);
+  fire("pointerdown", p.x, p.y);
+  if (dx !== 0 || dy !== 0) fire("pointermove", p.x + dx, p.y + dy);
+  fire("pointerup", p.x + dx, p.y + dy);
 }
 
 let root: HTMLElement;
@@ -143,11 +153,11 @@ describe("游戏页", () => {
   it("触摸长按 = 反模式（挖开模式下长按插旗）", () => {
     const cells = start();
     press(cells[63]!, { touch: true }); // 触摸点按开局
-    const down = new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 100, clientY: 100 });
+    const down = new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 331, clientY: 30 });
     Object.defineProperty(down, "pointerType", { value: "touch" });
     cells[7]!.dispatchEvent(down);
     vi.advanceTimersByTime(400); // 越过 LONG_PRESS_MS=350
-    const up = new MouseEvent("pointerup", { bubbles: true, button: 0, clientX: 100, clientY: 100 });
+    const up = new MouseEvent("pointerup", { bubbles: true, button: 0, clientX: 331, clientY: 30 });
     Object.defineProperty(up, "pointerType", { value: "touch" });
     cells[7]!.dispatchEvent(up);
     expect(cells[7]!.textContent).toBe("🚩");
@@ -171,6 +181,35 @@ describe("游戏页", () => {
     press(cells[5]!, { button: 2 });
     press(cells[5]!); // 对着旗挖
     expect(root.querySelectorAll(".cell.open")).toHaveLength(0);
+  });
+
+  it("点在格间缝隙:吸附最近格照常挖开(死区清零)", () => {
+    start();
+    const vp = root.querySelector<HTMLElement>(".board-viewport")!;
+    // (51.5, 331):x 在 0/1 列缝隙上,y 在第 7 行格心 → 应吸附挖开 56 号格
+    const fire = (type: string, x: number, y: number): void => {
+      const e = new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y });
+      Object.defineProperty(e, "pointerType", { value: "mouse" });
+      vp.dispatchEvent(e);
+    };
+    fire("pointerdown", 51.5, 331);
+    fire("pointerup", 51.5, 331);
+    expect(root.querySelectorAll(".cell.open").length).toBeGreaterThan(0);
+  });
+
+  it("鼠标 7px 抖动仍算点击(阈值 8px)", () => {
+    const cells = start();
+    press(cells[63]!, { dx: 7 });
+    expect(root.querySelectorAll(".cell.open").length).toBeGreaterThan(0);
+  });
+
+  it("鼠标移动 8px 转平移,不挖格", () => {
+    const cells = start();
+    press(cells[63]!, { dx: -8 });
+    expect(root.querySelectorAll(".cell.open")).toHaveLength(0);
+    expect(root.querySelector<HTMLElement>(".board")!.style.transform).toBe(
+      "translate(-8px, 0px) scale(1)",
+    );
   });
 });
 
