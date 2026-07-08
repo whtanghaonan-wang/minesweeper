@@ -96,6 +96,7 @@ button:focus-visible {
 
 /* ===== 选关页 ===== */
 .menu {
+  position: relative;
   width: 100%;
   max-width: 27rem;
   padding: max(2.25rem, env(safe-area-inset-top) + 1.25rem) 1.375rem
@@ -131,6 +132,12 @@ button:focus-visible {
   background: rgba(217, 136, 128, 0.12);
   border-radius: var(--r-btn);
   padding: 0.5rem 0.875rem;
+}
+
+.menu-back {
+  position: absolute;
+  top: max(1rem, env(safe-area-inset-top));
+  left: 1rem;
 }
 
 .tier-easy {

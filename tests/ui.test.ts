@@ -56,7 +56,7 @@ afterEach(() => {
 
 describe("选关页", () => {
   it("渲染 50 个藤蔓节点，仅第 1 关可玩，其余锁定", () => {
-    showMenu(root, { storage: createStorage(memBackend()), onPlay: () => {} });
+    showMenu(root, { storage: createStorage(memBackend()), onPlay: () => {}, onBack: () => {} });
     const nodes = root.querySelectorAll<HTMLButtonElement>(".vine-node");
     expect(nodes).toHaveLength(50);
     expect(nodes[0]!.disabled).toBe(false);
@@ -75,7 +75,7 @@ describe("选关页", () => {
     const storage = createStorage(memBackend());
     storage.recordWin(1, 83);
     const played: number[] = [];
-    showMenu(root, { storage, onPlay: (l) => played.push(l.id) });
+    showMenu(root, { storage, onPlay: (l) => played.push(l.id), onBack: () => {} });
     const nodes = root.querySelectorAll<HTMLButtonElement>(".vine-node");
     expect(nodes[0]!.classList.contains("done")).toBe(true);
     expect(nodes[0]!.textContent).toContain("1:23");
@@ -84,6 +84,33 @@ describe("选关页", () => {
     expect(scrolled).toHaveBeenCalled();
     nodes[1]!.click();
     expect(played).toEqual([2]);
+  });
+
+  it("返回钮回首页回调", () => {
+    let back = 0;
+    showMenu(root, {
+      storage: createStorage(memBackend()),
+      onPlay: () => {},
+      onBack: () => back++,
+    });
+    const btn = root.querySelector<HTMLButtonElement>(".menu-back")!;
+    expect(btn.getAttribute("aria-label")).toBe("返回首页");
+    btn.click();
+    expect(back).toBe(1);
+  });
+
+  it("已通关但无成绩(v1 迁移)显示 — 而非 未通关", () => {
+    const backend = memBackend();
+    backend.setItem(
+      "minesweeper-save-v1",
+      '{"version":2,"unlockedLevel":3,"bestTimes":{}}',
+    );
+    showMenu(root, { storage: createStorage(backend), onPlay: () => {}, onBack: () => {} });
+    const nodes = root.querySelectorAll<HTMLButtonElement>(".vine-node");
+    expect(nodes[0]!.classList.contains("done")).toBe(true);
+    expect(nodes[0]!.querySelector(".vn-best")!.textContent).toBe("—");
+    expect(nodes[1]!.querySelector(".vn-best")!.textContent).toBe("—");
+    expect(nodes[2]!.querySelector(".vn-best")!.textContent).toBe("未通关"); // current 关仍显示未通关
   });
 });
 
@@ -95,7 +122,12 @@ describe("游戏页", () => {
     // 竖屏窗口，避免触发宽屏行列转置，保证视觉索引 == 逻辑索引
     Object.defineProperty(window, "innerWidth", { value: 400, configurable: true });
     Object.defineProperty(window, "innerHeight", { value: 800, configurable: true });
-    showGame(root, { level, onExit: () => {}, onFinish: onFinish as never });
+    showGame(root, {
+      level,
+      onExit: () => {},
+      onFinish: onFinish as never,
+      onToggleSound: () => {},
+    });
     return root.querySelectorAll<HTMLButtonElement>(".cell");
   }
 

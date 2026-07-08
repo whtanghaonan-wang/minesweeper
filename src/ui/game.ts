@@ -34,6 +34,7 @@ export interface GameDeps {
   level: LevelSpec;
   onExit(): void;
   onFinish(result: GameResult): void;
+  onToggleSound(on: boolean): void;
 }
 
 type Mode = "dig" | "flag";

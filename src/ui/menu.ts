@@ -8,6 +8,7 @@ export interface MenuDeps {
   /** 存档降级为内存态时为 true，用于提示成绩不会保存 */
   persistWarning?: boolean;
   onPlay(level: LevelSpec): void;
+  onBack(): void;
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -21,6 +22,15 @@ export function showMenu(root: HTMLElement, deps: MenuDeps): void {
   const head = document.createElement("header");
   head.className = "menu-head";
   head.innerHTML = `<h1>扫雷</h1><p class="menu-sub">无猜 · 五十关 · 十档</p>`;
+
+  const back = document.createElement("button");
+  back.type = "button";
+  back.className = "pill back menu-back";
+  back.textContent = "←";
+  back.setAttribute("aria-label", "返回首页");
+  back.addEventListener("click", () => deps.onBack());
+  menu.appendChild(back);
+
   menu.appendChild(head);
 
   if (deps.persistWarning) {
@@ -110,7 +120,7 @@ function vineNode(
   num.textContent = String(level.id);
   const sub = document.createElement("span");
   sub.className = "vn-best num";
-  sub.textContent = locked ? "🔒" : best !== undefined ? fmtTime(best) : "未通关";
+  sub.textContent = locked ? "🔒" : best !== undefined ? fmtTime(best) : done ? "—" : "未通关";
   btn.append(num, sub);
 
   if (locked) {
@@ -119,7 +129,7 @@ function vineNode(
   } else {
     btn.setAttribute(
       "aria-label",
-      `第 ${level.id} 关，${best !== undefined ? `最好成绩 ${fmtTime(best)}` : "未通关"}`,
+      `第 ${level.id} 关，${best !== undefined ? `最好成绩 ${fmtTime(best)}` : done ? "已通关" : "未通关"}`,
     );
     btn.addEventListener("click", () => deps.onPlay(level));
   }
