@@ -13,6 +13,18 @@ vi.mock("../src/core/generator", () => ({
     createBoard(level.width, level.height, [0, 1, 2, 3, 4, 5, 6]),
 }));
 
+vi.mock("../src/ui/audio", () => ({
+  unlock: vi.fn(),
+  setMuted: vi.fn(),
+  isMuted: vi.fn(() => false),
+  playBlank: vi.fn(),
+  playNumber: vi.fn(),
+  playBoom: vi.fn(),
+  playWin: vi.fn(),
+  playLose: vi.fn(),
+}));
+import * as audio from "../src/ui/audio";
+
 function memBackend() {
   const map = new Map<string, string>();
   return {
@@ -52,6 +64,7 @@ beforeEach(() => {
 afterEach(() => {
   document.body.innerHTML = "";
   vi.useRealTimers();
+  vi.clearAllMocks();
 });
 
 describe("选关页", () => {
@@ -242,6 +255,62 @@ describe("游戏页", () => {
     expect(root.querySelector<HTMLElement>(".board")!.style.transform).toBe(
       "translate(-8px, 0px) scale(1)",
     );
+  });
+
+  it("音效触发:空白挖/数字挖/通关", () => {
+    const cells = start();
+    press(cells[63]!); // 洪泛(挖开格邻雷 0)
+    expect(vi.mocked(audio.playBlank)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(audio.playNumber)).not.toHaveBeenCalled();
+    press(cells[7]!); // 邻雷 1 的数字格,同时完成全盘 → 通关
+    expect(vi.mocked(audio.playNumber)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(audio.playWin)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(audio.unlock)).toHaveBeenCalled(); // 每次按下先解锁
+  });
+
+  it("踩雷:爆炸音即刻,失败音在结算暂停后", () => {
+    const cells = start();
+    press(cells[63]!);
+    press(cells[0]!); // 雷
+    expect(vi.mocked(audio.playBoom)).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(audio.playLose)).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(700);
+    expect(vi.mocked(audio.playLose)).toHaveBeenCalledTimes(1);
+  });
+
+  it("超时:无爆炸音,仅失败音", () => {
+    const cells = start();
+    press(cells[63]!);
+    vi.advanceTimersByTime(level.timeLimitSec * 1000 + 2000);
+    expect(vi.mocked(audio.playBoom)).not.toHaveBeenCalled();
+    expect(vi.mocked(audio.playLose)).toHaveBeenCalledTimes(1);
+  });
+
+  it("插旗与预旗不出声", () => {
+    const cells = start();
+    press(cells[7]!, { button: 2 }); // 预旗
+    press(cells[63]!); // 开局
+    press(cells[8]!, { button: 2 }); // 已开局插旗(8 号已开?否——8 号是数字格已被洪泛开,换未开格)
+    expect(vi.mocked(audio.playNumber)).not.toHaveBeenCalled();
+    expect(vi.mocked(audio.playBoom)).not.toHaveBeenCalled();
+  });
+
+  it("顶栏静音钮:切换调 setMuted 并回调持久化", () => {
+    const toggles: boolean[] = [];
+    vi.useFakeTimers();
+    Object.defineProperty(window, "innerWidth", { value: 400, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 800, configurable: true });
+    showGame(root, {
+      level,
+      onExit: () => {},
+      onFinish: () => {},
+      onToggleSound: (on) => toggles.push(on),
+    });
+    const btn = root.querySelector<HTMLButtonElement>(".game-sound")!;
+    expect(btn.textContent).toBe("🔊"); // isMuted mock 恒 false
+    btn.click();
+    expect(vi.mocked(audio.setMuted)).toHaveBeenCalledWith(true);
+    expect(toggles).toEqual([false]);
   });
 });
 

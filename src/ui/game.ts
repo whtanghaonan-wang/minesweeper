@@ -9,6 +9,16 @@ import {
 import { generate } from "../core/generator";
 import { TIER_NAMES, type LevelSpec } from "../core/levels";
 import { mulberry32 } from "../core/rng";
+import {
+  isMuted,
+  playBlank,
+  playBoom,
+  playLose,
+  playNumber,
+  playWin,
+  setMuted,
+  unlock,
+} from "./audio";
 import { fmtTime } from "./format";
 import {
   BASE_CELL_PX,
@@ -79,6 +89,8 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   const timeStat = document.createElement("span");
   timeStat.className = "pill stat num";
   stats.append(mineStat, timeStat);
+  const soundBtn = button("pill stat game-sound", "", toggleSound);
+  stats.appendChild(soundBtn);
   top.append(backBtn, title, stats);
 
   const boardVp = document.createElement("div");
@@ -156,6 +168,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     applyView();
   }
 
+  syncSoundBtn();
   refit(); // jsdom 下尺寸为 0，fitScale 回退 1，保持确定性
   requestAnimationFrame(refit); // 真实浏览器等布局完成后精确适配
   window.addEventListener("resize", onResize);
@@ -226,6 +239,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   }
 
   boardVp.addEventListener("pointerdown", (e) => {
+    unlock();
     const p = vpPoint(e);
     downCellVi = hitCell(p.x, p.y, view, w, h);
     boardVp.setPointerCapture?.(pid(e));
@@ -287,7 +301,12 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
       return;
     }
 
-    const r = b.revealed[li] ? chord(b, li) : reveal(b, li);
+    const wasOpen = b.revealed[li];
+    const r = wasOpen ? chord(b, li) : reveal(b, li);
+    if (r.changed.length > 0 && !r.exploded) {
+      if (!wasOpen && b.adjacent[li] === 0) playBlank();
+      else playNumber();
+    }
     if (r.changed.length > 0) syncChanged(r.changed);
     updateStats();
     if (r.exploded) return lose("mine", li);
@@ -298,6 +317,18 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     mode = m;
     digBtn.classList.toggle("active", m === "dig");
     flagBtn.classList.toggle("active", m === "flag");
+  }
+
+  function syncSoundBtn(): void {
+    soundBtn.textContent = isMuted() ? "🔇" : "🔊";
+    soundBtn.setAttribute("aria-label", isMuted() ? "开启音效" : "关闭音效");
+  }
+
+  function toggleSound(): void {
+    const nextMuted = !isMuted();
+    setMuted(nextMuted);
+    deps.onToggleSound(!nextMuted);
+    syncSoundBtn();
   }
 
   // ===== 计时 =====
@@ -337,6 +368,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     finished = true;
     stopTimer();
     window.removeEventListener("resize", onResize);
+    playWin();
     const b = board!;
     for (let li = 0; li < size; li++) if (b.mine[li] && !b.flagged[li]) toggleFlag(b, li);
     syncAll();
@@ -350,6 +382,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     finished = true;
     stopTimer();
     window.removeEventListener("resize", onResize);
+    if (reason === "mine") playBoom();
     const b = board;
     if (b) {
       for (let li = 0; li < size; li++) {
@@ -369,7 +402,10 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
       }
     }
     const timeSec = startedAt === 0 ? 0 : elapsedSec();
-    setTimeout(() => deps.onFinish({ won: false, reason, timeSec }), FINISH_PAUSE_MS);
+    setTimeout(() => {
+      playLose();
+      deps.onFinish({ won: false, reason, timeSec });
+    }, FINISH_PAUSE_MS);
   }
 
   function exit(): void {
