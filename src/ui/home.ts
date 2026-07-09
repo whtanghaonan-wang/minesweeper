@@ -8,6 +8,7 @@ export interface HomeDeps {
   version: string;
   onContinue(level: LevelSpec): void;
   onSelect(): void;
+  onEndless(): void;
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -66,7 +67,13 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
     deps.storage.setSoundOn(on);
     syncSound();
   });
-  stats.append(doneStat, bestStat, soundBtn);
+  stats.append(doneStat, bestStat);
+  if (save.endless.bestStreak > 0) {
+    const streakStat = document.createElement("span");
+    streakStat.textContent = `♾ 最长连胜 ${save.endless.bestStreak}`;
+    stats.appendChild(streakStat);
+  }
+  stats.appendChild(soundBtn);
 
   const barWrap = document.createElement("div");
   barWrap.className = "home-bar";
@@ -87,7 +94,18 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
   selBtn.className = "home-select";
   selBtn.textContent = "🌿 选关";
   selBtn.addEventListener("click", () => deps.onSelect());
-  actions.append(playBtn, selBtn);
+  const endlessBtn = document.createElement("button");
+  endlessBtn.type = "button";
+  endlessBtn.className = "home-endless";
+  if (cleared) {
+    endlessBtn.textContent = "♾ 无尽";
+    endlessBtn.addEventListener("click", () => deps.onEndless());
+  } else {
+    endlessBtn.disabled = true;
+    endlessBtn.classList.add("locked");
+    endlessBtn.innerHTML = `♾ 无尽<span class="he-sub">🔒 通关 50 关解锁</span>`;
+  }
+  actions.append(playBtn, selBtn, endlessBtn);
 
   const ver = document.createElement("p");
   ver.className = "home-ver num";

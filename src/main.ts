@@ -6,6 +6,8 @@ import { showHome } from "./ui/home";
 import { showMenu } from "./ui/menu";
 import { showGame } from "./ui/game";
 import { showResult } from "./ui/result";
+import { endlessSpec } from "./core/endless";
+import { mulberry32 } from "./core/rng";
 
 const APP_VERSION = "2.1.0";
 const root = document.querySelector<HTMLDivElement>("#app")!;
@@ -31,6 +33,7 @@ function gotoHome(): void {
     version: APP_VERSION,
     onContinue: gotoGame,
     onSelect: gotoMenu,
+    onEndless: gotoEndless,
   });
 }
 
@@ -62,6 +65,48 @@ function gotoGame(level: LevelSpec): void {
         onRetry: () => gotoGame(level),
         onMenu: gotoMenu,
       });
+    },
+  });
+}
+
+function gotoEndless(): void {
+  const streak = storage.load().endless.streak;
+  const level = endlessSpec(streak, mulberry32((Math.random() * 2 ** 32) >>> 0));
+  showGame(root, {
+    level,
+    mode: { kind: "endless", streak },
+    onExit: gotoHome, // 中途退出:本局不计、连胜保留(规格 §3.3)
+    onToggleSound: (on) => void storage.setSoundOn(on),
+    onFinish: (result) => {
+      if (result.won) {
+        const rec = storage.recordEndlessWin();
+        showResult({
+          won: true,
+          timeSec: result.timeSec,
+          newBest: rec.newBest,
+          persisted: true,
+          hasNext: true,
+          endless: { streak: rec.streak },
+          onNext: gotoEndless,
+          onRetry: gotoEndless,
+          onMenu: gotoHome,
+        });
+      } else {
+        const ended = storage.load().endless.streak;
+        storage.recordEndlessLoss();
+        showResult({
+          won: false,
+          reason: result.reason,
+          timeSec: result.timeSec,
+          newBest: false,
+          persisted: true,
+          hasNext: false,
+          endless: { streak: ended },
+          onNext: gotoEndless,
+          onRetry: gotoEndless, // 再来一盘:连胜已归零,回起步盘
+          onMenu: gotoHome,
+        });
+      }
     },
   });
 }

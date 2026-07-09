@@ -28,14 +28,16 @@ afterEach(() => {
 function show(storage = createStorage(memBackend()), over: Partial<Parameters<typeof showHome>[1]> = {}) {
   const played: LevelSpec[] = [];
   let selected = 0;
+  let endless = 0;
   showHome(root, {
     storage,
     version: "9.9.9-test",
     onContinue: (l) => played.push(l),
     onSelect: () => selected++,
+    onEndless: () => endless++,
     ...over,
   });
-  return { played, get selected() { return selected; }, storage };
+  return { played, get selected() { return selected; }, get endless() { return endless; }, storage };
 }
 
 describe("首页", () => {
@@ -101,5 +103,35 @@ describe("首页", () => {
     show(storage);
     expect(root.querySelector(".sound-btn")!.textContent).toBe("🔇");
     expect(root.querySelector(".home-vine path")).not.toBeNull();
+  });
+
+  it("无尽入口:未通关 50 关时灰态锁定并示明条件", () => {
+    const t = show();
+    const btn = root.querySelector<HTMLButtonElement>(".home-endless")!;
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent).toContain("无尽");
+    expect(btn.textContent).toContain("通关 50 关解锁");
+    btn.click();
+    expect(t.endless).toBe(0);
+  });
+
+  it("无尽入口:通关 50 关后可点,触发 onEndless", () => {
+    const storage = createStorage(memBackend());
+    for (const l of LEVELS) storage.recordWin(l.id, 100);
+    const t = show(storage);
+    const btn = root.querySelector<HTMLButtonElement>(".home-endless")!;
+    expect(btn.disabled).toBe(false);
+    btn.click();
+    expect(t.endless).toBe(1);
+  });
+
+  it("最长连胜 >0 时统计行显示", () => {
+    const storage = createStorage(memBackend());
+    storage.recordEndlessWin();
+    storage.recordEndlessWin();
+    show(storage);
+    expect(root.querySelector(".home-stats")!.textContent).toContain("最长连胜 2");
+    show(createStorage(memBackend())); // 无纪录不显示
+    expect(root.querySelector(".home-stats")!.textContent).not.toContain("最长连胜");
   });
 });
