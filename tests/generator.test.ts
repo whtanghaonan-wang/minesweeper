@@ -50,6 +50,7 @@ describe("LEVELS", () => {
       void: "虚空",
       chaos: "混沌",
       finale: "终焉",
+      endless: "无尽",
     });
   });
 });
@@ -66,6 +67,7 @@ describe("generate", () => {
     void: [1],
     chaos: [1],
     finale: [1],
+    endless: [],
   };
 
   for (const level of LEVELS) {

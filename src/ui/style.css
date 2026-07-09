@@ -171,6 +171,10 @@ button:focus-visible {
   --tier-color: var(--finale);
 }
 
+.tier-endless {
+  --tier-color: #5b8fa8;
+}
+
 /* ===== 藤蔓选关 ===== */
 .vine-map {
   position: relative;

@@ -8,7 +8,8 @@ export type Tier =
   | "umbra"
   | "void"
   | "chaos"
-  | "finale";
+  | "finale"
+  | "endless";
 
 export interface LevelSpec {
   id: number;
@@ -30,6 +31,7 @@ export const TIER_NAMES: Record<Tier, string> = {
   void: "虚空",
   chaos: "混沌",
   finale: "终焉",
+  endless: "无尽",
 };
 
 /** 关卡数值唯一来源（v2 设计文档 §1.2）：档内密度递增；专家/深渊两档密度近无猜生成可行上限，
