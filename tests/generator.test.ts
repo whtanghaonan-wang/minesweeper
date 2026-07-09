@@ -1,6 +1,6 @@
 import { appendFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
-import { LEVELS, TIER_NAMES, type Tier } from "../src/core/levels";
+import { LEVELS, TIER_NAMES, type Tier, type LevelSpec } from "../src/core/levels";
 import { generate } from "../src/core/generator";
 import { mulberry32 } from "../src/core/rng";
 import { isSolvable } from "../src/core/solver";
@@ -92,4 +92,26 @@ describe("generate", () => {
       }
     });
   }
+});
+
+describe("generate v2.2 修补式(规格 §1.2)", () => {
+  it("同种子确定性:两次生成雷布局完全相同", () => {
+    const level = LEVELS[9]!; // 14x20
+    const first = Math.floor(level.height / 2) * level.width + Math.floor(level.width / 2);
+    const a = generate(level, first, mulberry32(42));
+    const b = generate(level, first, mulberry32(42));
+    expect(a.mine).toEqual(b.mine);
+  });
+
+  it("28×44 终焉封顶规格可生成且无猜、盘面干净", () => {
+    const big: LevelSpec = {
+      id: 0, tier: "finale", width: 28, height: 44, mines: 285, timeLimitSec: 1800,
+    };
+    const first = Math.floor(44 / 2) * 28 + Math.floor(28 / 2);
+    const b = generate(big, first, mulberry32(1));
+    expect(b.mineCount).toBe(285);
+    expect(b.revealed.some(Boolean)).toBe(false);
+    expect(b.flagged.some(Boolean)).toBe(false);
+    expect(isSolvable(b, first)).toBe(true);
+  });
 });

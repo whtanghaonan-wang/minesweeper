@@ -12,26 +12,35 @@ interface ComponentResult {
   maxCount: number;
 }
 
+export interface ProbeResult {
+  solved: boolean;
+  /** 停机(推完或卡死)时的已揭开快照,生成器修补用 */
+  revealed: boolean[];
+}
+
 /**
  * 判定盘面能否从 firstIdx 出发全程纯逻辑推完（无猜）。
  * 推理层级：基础规则 → 子集推理 → 全局终局 → 边界穷举 + 全局雷数计数。
  * 不修改传入的 board。maxComponent 为穷举的连通块大小上限（0 = 禁用穷举）。
  */
 export function isSolvable(board: Board, firstIdx: number, maxComponent = 24): boolean {
+  return solveProbe(board, firstIdx, maxComponent).solved;
+}
+
+/** 与 isSolvable 同一推演,额外暴露停机时的已揭开集。不修改传入的 board。 */
+export function solveProbe(board: Board, firstIdx: number, maxComponent = 24): ProbeResult {
   const size = board.width * board.height;
   const b: Board = {
     ...board,
     revealed: new Array<boolean>(size).fill(false),
     flagged: new Array<boolean>(size).fill(false),
   };
-
-  if (b.mine[firstIdx]) return false;
+  if (b.mine[firstIdx]) return { solved: false, revealed: b.revealed };
   reveal(b, firstIdx);
-
   while (!isWin(b)) {
-    if (!step(b, maxComponent)) return false;
+    if (!step(b, maxComponent)) return { solved: false, revealed: b.revealed };
   }
-  return true;
+  return { solved: true, revealed: b.revealed };
 }
 
 /** 执行一轮推理；有任何新格被揭开或标雷返回 true，无进展返回 false。 */
