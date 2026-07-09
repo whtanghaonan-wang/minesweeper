@@ -9,7 +9,7 @@ import { showResult } from "./ui/result";
 import { endlessSpec } from "./core/endless";
 import { mulberry32 } from "./core/rng";
 
-const APP_VERSION = "2.1.0";
+const APP_VERSION = "2.2.0";
 const root = document.querySelector<HTMLDivElement>("#app")!;
 
 function localStorageBackend(): globalThis.Storage | undefined {
