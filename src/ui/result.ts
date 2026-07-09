@@ -7,6 +7,8 @@ export interface ResultOptions {
   newBest: boolean;
   persisted: boolean;
   hasNext: boolean;
+  /** 无尽模式:胜=新连胜数,负=止步时的连胜数;存在即启用无尽文案 */
+  endless?: { streak: number };
   onNext(): void;
   onRetry(): void;
   onMenu(): void;
@@ -21,8 +23,16 @@ export function showResult(opts: ResultOptions): void {
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
 
-  const icon = opts.won ? "🎉" : opts.reason === "time" ? "⏰" : "💥";
-  const heading = opts.won ? "通关！" : opts.reason === "time" ? "时间到" : "踩到雷了";
+  const icon = opts.won ? (opts.endless ? "🔥" : "🎉") : opts.reason === "time" ? "⏰" : "💥";
+  const heading = opts.endless
+    ? opts.won
+      ? `连胜 ${opts.endless.streak}!`
+      : `连胜止于 ${opts.endless.streak}`
+    : opts.won
+      ? "通关！"
+      : opts.reason === "time"
+        ? "时间到"
+        : "踩到雷了";
 
   const iconEl = document.createElement("div");
   iconEl.className = "modal-icon";
@@ -41,7 +51,7 @@ export function showResult(opts: ResultOptions): void {
   if (opts.won && opts.newBest) {
     const badge = document.createElement("span");
     badge.className = "best-badge";
-    badge.textContent = "★ 新纪录";
+    badge.textContent = opts.endless ? "★ 新纪录 · 最长连胜" : "★ 新纪录";
     modal.appendChild(badge);
   }
 
@@ -59,12 +69,16 @@ export function showResult(opts: ResultOptions): void {
     fn();
   };
   if (opts.won) {
-    if (opts.hasNext) actions.appendChild(btn("btn primary win", "下一关", close(opts.onNext)));
-    actions.appendChild(btn(opts.hasNext ? "btn" : "btn primary win", "重玩", close(opts.onRetry)));
+    if (opts.endless) {
+      actions.appendChild(btn("btn primary win", "下一盘", close(opts.onNext)));
+    } else {
+      if (opts.hasNext) actions.appendChild(btn("btn primary win", "下一关", close(opts.onNext)));
+      actions.appendChild(btn(opts.hasNext ? "btn" : "btn primary win", "重玩", close(opts.onRetry)));
+    }
   } else {
-    actions.appendChild(btn("btn primary lose", "重试", close(opts.onRetry)));
+    actions.appendChild(btn("btn primary lose", opts.endless ? "再来一盘" : "重试", close(opts.onRetry)));
   }
-  actions.appendChild(btn("btn", "返回选关", close(opts.onMenu)));
+  actions.appendChild(btn("btn", opts.endless ? "回首页" : "返回选关", close(opts.onMenu)));
   modal.appendChild(actions);
 
   overlay.appendChild(modal);

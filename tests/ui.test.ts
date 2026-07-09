@@ -389,6 +389,24 @@ describe("游戏页", () => {
     fire("pointerup");
     expect(root.querySelectorAll(".cell.open")).toHaveLength(0);
   });
+
+  it("无尽模式:标题显示 ♾ 无尽与连胜徽章", () => {
+    vi.useFakeTimers();
+    Object.defineProperty(window, "innerWidth", { value: 400, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 800, configurable: true });
+    showGame(root, {
+      level,
+      mode: { kind: "endless", streak: 3 },
+      onExit: () => {},
+      onFinish: () => {},
+      onToggleSound: () => {},
+    });
+    const title = root.querySelector(".game-title")!;
+    expect(title.textContent).toContain("无尽");
+    expect(title.textContent).toContain("连胜 3");
+    expect(title.querySelector(".tier-endless")).not.toBeNull();
+    expect(title.textContent).not.toContain("第");
+  });
 });
 
 describe("结算弹窗", () => {
@@ -430,5 +448,37 @@ describe("结算弹窗", () => {
     expect(overlay.textContent).toContain("时间到");
     expect(overlay.textContent).toContain("重试");
     expect(overlay.textContent).not.toContain("下一关");
+  });
+
+  it("无尽·胜:连胜标题、下一盘、最长连胜新纪录徽章、回首页", () => {
+    let next = 0;
+    let menu = 0;
+    showResult({
+      won: true, timeSec: 100, newBest: true, persisted: true, hasNext: true,
+      endless: { streak: 7 },
+      onNext: () => next++, onRetry: () => {}, onMenu: () => menu++,
+    });
+    const overlay = document.querySelector(".overlay")!;
+    expect(overlay.textContent).toContain("连胜 7");
+    expect(overlay.textContent).toContain("最长连胜");
+    const buttons = [...overlay.querySelectorAll("button")].map((b) => b.textContent);
+    expect(buttons).toContain("下一盘");
+    expect(buttons).toContain("回首页");
+    expect(buttons).not.toContain("下一关");
+    [...overlay.querySelectorAll("button")].find((b) => b.textContent === "下一盘")!.click();
+    expect(next).toBe(1);
+  });
+
+  it("无尽·负:连胜止于 N、再来一盘", () => {
+    showResult({
+      won: false, reason: "mine", timeSec: 50, newBest: false, persisted: true, hasNext: false,
+      endless: { streak: 4 },
+      onNext: () => {}, onRetry: () => {}, onMenu: () => {},
+    });
+    const overlay = document.querySelector(".overlay")!;
+    expect(overlay.textContent).toContain("连胜止于 4");
+    const buttons = [...overlay.querySelectorAll("button")].map((b) => b.textContent);
+    expect(buttons).toContain("再来一盘");
+    expect(buttons).toContain("回首页");
   });
 });

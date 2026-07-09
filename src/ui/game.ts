@@ -42,8 +42,11 @@ export interface GameResult {
   timeSec: number;
 }
 
+export type GameMode = { kind: "campaign" } | { kind: "endless"; streak: number };
+
 export interface GameDeps {
   level: LevelSpec;
+  mode?: GameMode;
   onExit(): void;
   onFinish(result: GameResult): void;
   onToggleSound(on: boolean): void;
@@ -85,7 +88,11 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   backBtn.setAttribute("aria-label", "返回选关");
   const title = document.createElement("div");
   title.className = "game-title";
-  title.innerHTML = `<b>第 ${level.id} 关</b><span class="game-tier tier-${level.tier}">${TIER_NAMES[level.tier]}</span>`;
+  const gameMode: GameMode = deps.mode ?? { kind: "campaign" };
+  title.innerHTML =
+    gameMode.kind === "endless"
+      ? `<b>♾ 无尽</b><span class="game-tier tier-endless">连胜 ${gameMode.streak}</span>`
+      : `<b>第 ${level.id} 关</b><span class="game-tier tier-${level.tier}">${TIER_NAMES[level.tier]}</span>`;
   const stats = document.createElement("div");
   stats.className = "game-stats";
   const mineStat = document.createElement("span");
