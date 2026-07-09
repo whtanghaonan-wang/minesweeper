@@ -70,6 +70,8 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   let deadline = 0;
   let startedAt = 0;
   let timerId: ReturnType<typeof setInterval> | null = null;
+  let finishTimer: ReturnType<typeof setTimeout> | null = null;
+  let pendingFinish: GameResult | null = null;
 
   // ===== DOM =====
   const game = document.createElement("div");
@@ -373,8 +375,13 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     for (let li = 0; li < size; li++) if (b.mine[li] && !b.flagged[li]) toggleFlag(b, li);
     syncAll();
     updateStats();
-    const timeSec = elapsedSec();
-    setTimeout(() => deps.onFinish({ won: true, timeSec }), FINISH_PAUSE_MS);
+    pendingFinish = { won: true, timeSec: elapsedSec() };
+    finishTimer = setTimeout(() => {
+      const p = pendingFinish!;
+      finishTimer = null;
+      pendingFinish = null;
+      deps.onFinish(p);
+    }, FINISH_PAUSE_MS);
   }
 
   function lose(reason: "mine" | "time", boomLogical: number | null): void {
@@ -401,17 +408,33 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
         el.textContent = "💥";
       }
     }
-    const timeSec = startedAt === 0 ? 0 : elapsedSec();
-    setTimeout(() => {
+    pendingFinish = { won: false, reason, timeSec: startedAt === 0 ? 0 : elapsedSec() };
+    finishTimer = setTimeout(() => {
+      const p = pendingFinish!;
+      finishTimer = null;
+      pendingFinish = null;
       playLose();
-      deps.onFinish({ won: false, reason, timeSec });
+      deps.onFinish(p);
     }, FINISH_PAUSE_MS);
+  }
+
+  // 结算回调延迟 FINISH_PAUSE_MS;窗口期内退出/重开时:胜利结果立即冲刷(保证成绩落档),
+  // 失败结果整体丢弃(否则失败音/结算弹窗会残留到下一页面)
+  function settleFinish(): void {
+    if (finishTimer !== null) {
+      clearTimeout(finishTimer);
+      finishTimer = null;
+    }
+    const p = pendingFinish;
+    pendingFinish = null;
+    if (p !== null && p.won) deps.onFinish(p);
   }
 
   function exit(): void {
     stopTimer();
     finished = true;
     window.removeEventListener("resize", onResize);
+    settleFinish();
     deps.onExit();
   }
 
@@ -419,6 +442,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     finished = true;
     stopTimer();
     window.removeEventListener("resize", onResize);
+    settleFinish();
     showGame(root, deps);
   }
 

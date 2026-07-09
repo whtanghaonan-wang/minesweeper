@@ -63,7 +63,7 @@ describe("手势状态机", () => {
   it("鼠标：位移小于阈值 → 抬起触发 tap(主)", () => {
     const g = createGestures();
     expect(g.handle({ type: "down", id: 1, x: 100, y: 100, touch: false, button: 0 })).toEqual([]);
-    expect(g.handle({ type: "move", id: 1, x: 102, y: 101 })).toEqual([]); // < 4px
+    expect(g.handle({ type: "move", id: 1, x: 102, y: 101 })).toEqual([]); // 位移 ≈2.2px < 8px 阈值
     expect(g.handle({ type: "up", id: 1, x: 102, y: 101 })).toEqual([
       { type: "tap", alt: false, touch: false },
     ]);

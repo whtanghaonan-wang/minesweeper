@@ -295,6 +295,30 @@ describe("游戏页", () => {
     expect(vi.mocked(audio.playBoom)).not.toHaveBeenCalled();
   });
 
+  it("踩雷后结算暂停窗口内重开:失败音与结算回调整体丢弃", () => {
+    const finishes: unknown[] = [];
+    const cells = start((r) => finishes.push(r));
+    press(cells[63]!);
+    press(cells[0]!); // 雷
+    expect(vi.mocked(audio.playBoom)).toHaveBeenCalledTimes(1);
+    root.querySelector<HTMLButtonElement>(".restart")!.click();
+    vi.advanceTimersByTime(700);
+    expect(vi.mocked(audio.playLose)).not.toHaveBeenCalled();
+    expect(finishes).toEqual([]);
+  });
+
+  it("通关后结算暂停窗口内退出:结算立即冲刷,成绩不丢", () => {
+    const finishes: Array<{ won: boolean }> = [];
+    const cells = start((r) => finishes.push(r as { won: boolean }));
+    press(cells[63]!);
+    press(cells[7]!); // 通关
+    root.querySelector<HTMLButtonElement>(".back")!.click();
+    expect(finishes).toHaveLength(1);
+    expect(finishes[0]!.won).toBe(true);
+    vi.advanceTimersByTime(700);
+    expect(finishes).toHaveLength(1); // 不重复回调
+  });
+
   it("顶栏静音钮:切换调 setMuted 并回调持久化", () => {
     const toggles: boolean[] = [];
     vi.useFakeTimers();
