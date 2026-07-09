@@ -55,6 +55,33 @@ describe("视口数学", () => {
     expect(zoomAt({ scale: 2, tx: 0, ty: 0 }, m, 0, 0, 0.5).scale).toBe(2); // 不许缩小过 fit
     expect(zoomAt({ scale: 2, tx: 0, ty: 0 }, m, 0, 0, 100).scale).toBe(2); // max=2 封顶
   });
+
+  it("净空 fit:fitScale 按扣除上下净空后的高度计算", () => {
+    const m: Metrics = { viewW: 600, viewH: 800, boardW: 300, boardH: 400, insetTop: 100, insetBottom: 100 };
+    expect(fitScale(m)).toBe(1.5); // min(600/300, (800-200)/400)
+    expect(fitScale({ ...m, insetTop: 0, insetBottom: 0 })).toBe(2); // 无净空回退 v2.1 行为
+  });
+
+  it("净空 clamp:盘小于净空区的轴向在净空区内居中", () => {
+    const m: Metrics = { viewW: 600, viewH: 800, boardW: 300, boardH: 400, insetTop: 100, insetBottom: 100 };
+    const v = clampView({ scale: 1, tx: -50, ty: 999 }, m);
+    expect(v).toEqual({ scale: 1, tx: 150, ty: 200 }); // ty = insetTop + (600-400)/2
+  });
+
+  it("盘超出净空区:可延伸到全屏(含菜单底下),但净空区内不许露底", () => {
+    const m: Metrics = { viewW: 600, viewH: 800, boardW: 300, boardH: 700, insetTop: 100, insetBottom: 100 };
+    // bh=700 > 净空 600:ty ∈ [insetTop + 600 - 700, insetTop] = [0, 100]
+    expect(clampView({ scale: 1, tx: 0, ty: 999 }, m).ty).toBe(100);
+    expect(clampView({ scale: 1, tx: 0, ty: -999 }, m).ty).toBe(0);
+    // 盘远大于全屏:上缘可越出屏幕顶端
+    const big = { viewW: 600, viewH: 800, boardW: 300, boardH: 2000, insetTop: 100, insetBottom: 100 };
+    expect(clampView({ scale: 1, tx: 0, ty: -9999 }, big).ty).toBe(100 + 600 - 2000); // -1300
+  });
+
+  it("净空过大(≥viewH)时回退按全高计算,不产生负可用区", () => {
+    const m: Metrics = { viewW: 600, viewH: 800, boardW: 300, boardH: 400, insetTop: 500, insetBottom: 400 };
+    expect(fitScale(m)).toBe(2); // 净空非法 → 按 viewH
+  });
 });
 
 const types = (as: GestureAction[]): string[] => as.map((a) => a.type);

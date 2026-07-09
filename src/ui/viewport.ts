@@ -11,6 +11,9 @@ export interface Metrics {
   viewH: number;
   boardW: number;
   boardH: number;
+  /** 上/下悬浮菜单净空(v2.2 §4.2):适配与居中避开,钳制允许延伸到其下。缺省 0。 */
+  insetTop?: number;
+  insetBottom?: number;
 }
 
 export const BASE_CELL_PX = 40;
@@ -43,21 +46,37 @@ function nearestIndex(z: number, count: number): number | null {
   return null;
 }
 
+/** 扣除上下净空后的可用高度;净空非法(≥viewH)时回退全高 */
+function innerViewH(m: Metrics): number {
+  const ih = m.viewH - (m.insetTop ?? 0) - (m.insetBottom ?? 0);
+  return ih > 0 ? ih : m.viewH;
+}
+
+/** 与 innerViewH 配套的可用区顶端 y;净空非法时回退 0 */
+function innerTop(m: Metrics): number {
+  const top = m.insetTop ?? 0;
+  return m.viewH - top - (m.insetBottom ?? 0) > 0 ? top : 0;
+}
+
 export function fitScale(m: Metrics): number {
-  if (m.viewW <= 0 || m.viewH <= 0 || m.boardW <= 0 || m.boardH <= 0) return 1;
-  return Math.min(m.viewW / m.boardW, m.viewH / m.boardH);
+  const ih = innerViewH(m);
+  if (m.viewW <= 0 || ih <= 0 || m.boardW <= 0 || m.boardH <= 0) return 1;
+  return Math.min(m.viewW / m.boardW, ih / m.boardH);
 }
 
 export function maxScale(m: Metrics): number {
   return Math.max(fitScale(m), MAX_CELL_PX / BASE_CELL_PX);
 }
 
-/** 平移钳制：盘小于视口的轴向居中，大于视口的轴向不许露底 */
+/** 平移钳制：盘小于净空区的轴向在净空区内居中；大于净空区的轴向允许延伸到全屏边缘,
+ *  但净空区内不许露底(v2.2 §4.2;无净空时与 v2.1 行为一致) */
 export function clampView(v: ViewState, m: Metrics): ViewState {
   const bw = m.boardW * v.scale;
   const bh = m.boardH * v.scale;
+  const top = innerTop(m);
+  const ih = innerViewH(m);
   const tx = bw <= m.viewW ? (m.viewW - bw) / 2 : Math.min(0, Math.max(m.viewW - bw, v.tx));
-  const ty = bh <= m.viewH ? (m.viewH - bh) / 2 : Math.min(0, Math.max(m.viewH - bh, v.ty));
+  const ty = bh <= ih ? top + (ih - bh) / 2 : Math.min(top, Math.max(top + ih - bh, v.ty));
   return { scale: v.scale, tx, ty };
 }
 
