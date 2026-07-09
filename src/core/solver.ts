@@ -70,19 +70,32 @@ function step(b: Board, maxComponent: number): boolean {
   }
 
   // 子集推理：A ⊆ B → (B−A) 的雷数 = B.mines − A.mines
+  // 性能:A ⊆ C 必共享 A 的首格,只对共享首格的约束对检查;成员集每约束每轮建一次。
+  // 推导结果与全配对检查完全一致(v2.2 规格 §1.3:规则集冻结,仅提速)。
   if (toReveal.size === 0 && toFlag.size === 0) {
-    for (const a of constraints) {
-      for (const c of constraints) {
-        if (a === c || a.cells.length >= c.cells.length) continue;
-        const cSet = new Set(c.cells);
+    const sets = constraints.map((c) => new Set(c.cells));
+    const byCell = new Map<number, number[]>();
+    constraints.forEach((c, ci) => {
+      for (const x of c.cells) {
+        let list = byCell.get(x);
+        if (!list) byCell.set(x, (list = []));
+        list.push(ci);
+      }
+    });
+    constraints.forEach((a, ai) => {
+      for (const ci of byCell.get(a.cells[0]!) ?? []) {
+        if (ci === ai) continue;
+        const c = constraints[ci]!;
+        if (a.cells.length >= c.cells.length) continue;
+        const cSet = sets[ci]!;
         if (!a.cells.every((x) => cSet.has(x))) continue;
-        const aSet = new Set(a.cells);
+        const aSet = sets[ai]!;
         const diff = c.cells.filter((x) => !aSet.has(x));
         const diffMines = c.mines - a.mines;
         if (diffMines === 0) diff.forEach((i) => toReveal.add(i));
         else if (diffMines === diff.length) diff.forEach((i) => toFlag.add(i));
       }
-    }
+    });
   }
 
   // 边界穷举 + 全局雷数计数
