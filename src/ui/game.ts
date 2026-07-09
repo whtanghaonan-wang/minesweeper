@@ -13,8 +13,10 @@ import {
   isMuted,
   playBlank,
   playBoom,
+  playFlag,
   playLose,
   playNumber,
+  playUnflag,
   playWin,
   setMuted,
   unlock,
@@ -276,6 +278,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     "wheel",
     (e) => {
       e.preventDefault();
+      downCellVi = null; // 缩放改变盘格对位,按下格作废(v2.1 终审 Minor#3)
       const p = vpPoint(e);
       view = zoomAt(view, metrics(), p.x, p.y, e.deltaY < 0 ? WHEEL_STEP : 1 / WHEEL_STEP);
       applyView();
@@ -290,8 +293,13 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     if (board === null) {
       if (action === "flag") {
         // 开局前预旗：只记标记，不生成盘面
-        if (preFlags.has(liEarly)) preFlags.delete(liEarly);
-        else preFlags.add(liEarly);
+        if (preFlags.has(liEarly)) {
+          preFlags.delete(liEarly);
+          playUnflag();
+        } else {
+          preFlags.add(liEarly);
+          playFlag();
+        }
         syncCell(i);
         updateStats();
         return;
@@ -307,7 +315,8 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
 
     // 已开数字格：无论模式，点按一律尝试 chord
     if (!b.revealed[li] && action === "flag") {
-      toggleFlag(b, li);
+      if (toggleFlag(b, li)) playFlag();
+      else playUnflag();
       syncCell(i);
       updateStats();
       return;

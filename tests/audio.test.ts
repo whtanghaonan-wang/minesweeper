@@ -5,8 +5,10 @@ import {
   isMuted,
   playBlank,
   playBoom,
+  playFlag,
   playLose,
   playNumber,
+  playUnflag,
   playWin,
   setMuted,
   unlock,
@@ -104,5 +106,22 @@ describe("audio 木质柔和五音效", () => {
       unlock();
       playWin();
     }).not.toThrow();
+  });
+
+  it("插旗/拔旗音(甲·木钉入座):各 sine×2+噪声×1,拔旗低一档;静音短路", () => {
+    unlock();
+    const c = FakeCtx.instances[0]!;
+    playFlag();
+    expect(c.oscs).toHaveLength(2);
+    expect(c.oscs.every((o) => o.type === "sine" && o.started)).toBe(true);
+    expect(c.noises).toBe(1);
+    playUnflag();
+    expect(c.oscs).toHaveLength(4);
+    expect(c.noises).toBe(2);
+    setMuted(true);
+    playFlag();
+    playUnflag();
+    expect(c.oscs).toHaveLength(4);
+    expect(c.noises).toBe(2);
   });
 });

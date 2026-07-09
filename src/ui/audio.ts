@@ -1,4 +1,4 @@
-// 五种音效的 Web Audio 实时合成(v2.1 设计文档 §3,A·木质柔和)——零素材文件。
+// 七种音效的 Web Audio 实时合成(v2.1 设计文档 §3 + v2.2 §5,A·木质柔和)——零素材文件。
 // 参数经用户试听拍板,修改前必须重新走试听确认。
 let ctx: AudioContext | null = null;
 let muted = false;
@@ -98,4 +98,18 @@ export function playWin(): void {
 /** 失败 */
 export function playLose(): void {
   [392, 311, 262].forEach((f, i) => tone(f, "triangle", 0.22, 0.2, i * 0.16));
+}
+
+/** 插旗(v2.2 §5.1,甲·木钉入座) */
+export function playFlag(): void {
+  tone(988, "sine", 0.055, 0.2);
+  tone(1976, "sine", 0.03, 0.05);
+  noise(0.02, 0.07, 0, 1500);
+}
+
+/** 拔旗(低一档) */
+export function playUnflag(): void {
+  tone(784, "sine", 0.055, 0.18);
+  tone(1568, "sine", 0.03, 0.04);
+  noise(0.02, 0.05, 0, 1100);
 }

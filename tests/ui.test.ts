@@ -22,6 +22,8 @@ vi.mock("../src/ui/audio", () => ({
   playBoom: vi.fn(),
   playWin: vi.fn(),
   playLose: vi.fn(),
+  playFlag: vi.fn(),
+  playUnflag: vi.fn(),
 }));
 import * as audio from "../src/ui/audio";
 
@@ -343,6 +345,49 @@ describe("游戏页", () => {
     expect(root.querySelector(".game-bottom .bottom-actions .mode-toggle")).not.toBeNull();
     expect(root.querySelector(".game-bottom .bottom-actions .restart")).not.toBeNull();
     expect(root.querySelector(".game > .board-viewport")).not.toBeNull();
+  });
+
+  it("旗音:预旗/盘上右键 插响拔响,拔旗低一档走 playUnflag", () => {
+    const cells = start();
+    press(cells[7]!, { button: 2 }); // 预旗
+    expect(vi.mocked(audio.playFlag)).toHaveBeenCalledTimes(1);
+    press(cells[7]!, { button: 2 }); // 预旗取消
+    expect(vi.mocked(audio.playUnflag)).toHaveBeenCalledTimes(1);
+    press(cells[7]!, { button: 2 }); // 重新预旗
+    press(cells[63]!); // 首挖开局(预旗落盘不再响)
+    expect(vi.mocked(audio.playFlag)).toHaveBeenCalledTimes(2);
+    press(cells[7]!, { button: 2 }); // 盘上拔旗
+    expect(vi.mocked(audio.playUnflag)).toHaveBeenCalledTimes(2);
+    press(cells[7]!, { button: 2 }); // 盘上插旗
+    expect(vi.mocked(audio.playFlag)).toHaveBeenCalledTimes(3);
+  });
+
+  it("旗音:触摸长按插旗同样响 playFlag", () => {
+    const cells = start();
+    press(cells[63]!, { touch: true }); // 开局
+    const down = new MouseEvent("pointerdown", { bubbles: true, button: 0, clientX: 331, clientY: 30 });
+    Object.defineProperty(down, "pointerType", { value: "touch" });
+    cells[7]!.dispatchEvent(down);
+    vi.advanceTimersByTime(400);
+    const up = new MouseEvent("pointerup", { bubbles: true, button: 0, clientX: 331, clientY: 30 });
+    Object.defineProperty(up, "pointerType", { value: "touch" });
+    cells[7]!.dispatchEvent(up);
+    expect(vi.mocked(audio.playFlag)).toHaveBeenCalledTimes(1);
+  });
+
+  it("按住期间滚轮缩放:抬起不挖格(v2.1 终审 Minor#3)", () => {
+    const cells = start();
+    const vp = root.querySelector<HTMLElement>(".board-viewport")!;
+    const p = { x: 10 + 7 * 43 + 20, y: 10 + 7 * 43 + 20 }; // 63 号格心
+    const fire = (type: string): void => {
+      const e = new MouseEvent(type, { bubbles: true, button: 0, clientX: p.x, clientY: p.y });
+      Object.defineProperty(e, "pointerType", { value: "mouse" });
+      cells[63]!.dispatchEvent(e);
+    };
+    fire("pointerdown");
+    vp.dispatchEvent(new WheelEvent("wheel", { deltaY: -100, bubbles: true, cancelable: true }));
+    fire("pointerup");
+    expect(root.querySelectorAll(".cell.open")).toHaveLength(0);
   });
 });
 
