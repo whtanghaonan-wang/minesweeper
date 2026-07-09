@@ -57,6 +57,7 @@ describe("首页", () => {
     const t = show(storage);
     expect(root.querySelector(".home-play")!.textContent).toContain("继续 · 第 3 关");
     expect(root.querySelector(".home-stats")!.textContent).toContain("2/50");
+    expect(root.querySelector(".home-stats")!.textContent).toContain("最近通关");
     expect(root.querySelector(".home-stats")!.textContent).toContain("0:45"); // 最高已通关=第2关
     (root.querySelector(".home-play") as HTMLButtonElement).click();
     expect(t.played.map((l) => l.id)).toEqual([3]);

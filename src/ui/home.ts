@@ -50,7 +50,7 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
   const doneStat = document.createElement("span");
   doneStat.textContent = `🌱 已通关 ${done}/${MAX}`;
   const bestStat = document.createElement("span");
-  bestStat.textContent = `⏱ 最快 ${bestOwner ? fmtTime(save.bestTimes[bestOwner.id]!) : "—"}`;
+  bestStat.textContent = `⏱ 最近通关 ${bestOwner ? fmtTime(save.bestTimes[bestOwner.id]!) : "—"}`;
   const soundBtn = document.createElement("button");
   soundBtn.type = "button";
   soundBtn.className = "sound-btn";
