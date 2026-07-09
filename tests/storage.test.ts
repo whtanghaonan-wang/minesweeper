@@ -13,7 +13,13 @@ function memBackend(initial?: Record<string, string>) {
 describe("createStorage", () => {
   it("空档返回默认值", () => {
     const s = createStorage(memBackend());
-    expect(s.load()).toEqual({ version: 2, unlockedLevel: 1, bestTimes: {}, soundOn: true });
+    expect(s.load()).toEqual({
+      version: 3,
+      unlockedLevel: 1,
+      bestTimes: {},
+      soundOn: true,
+      endless: { streak: 0, bestStreak: 0 },
+    });
   });
 
   it("recordWin 首次即纪录、更好才更新", () => {
@@ -45,10 +51,11 @@ describe("createStorage", () => {
 
   it("损坏 JSON / 版本不符 / 非法字段回退默认", () => {
     expect(createStorage(memBackend({ [SAVE_KEY]: "{oops" })).load()).toEqual({
-      version: 2,
+      version: 3,
       unlockedLevel: 1,
       bestTimes: {},
       soundOn: true,
+      endless: { streak: 0, bestStreak: 0 },
     });
     expect(
       createStorage(memBackend({ [SAVE_KEY]: '{"version":99,"unlockedLevel":5,"bestTimes":{}}' })).load()
@@ -72,7 +79,13 @@ describe("createStorage", () => {
         throw new Error("nope");
       },
     });
-    expect(s.load()).toEqual({ version: 2, unlockedLevel: 1, bestTimes: {}, soundOn: true });
+    expect(s.load()).toEqual({
+      version: 3,
+      unlockedLevel: 1,
+      bestTimes: {},
+      soundOn: true,
+      endless: { streak: 0, bestStreak: 0 },
+    });
     const r = s.recordWin(1, 55);
     expect(r.newBest).toBe(true);
     expect(r.persisted).toBe(false);
@@ -95,16 +108,18 @@ describe("createStorage", () => {
     });
     const s = createStorage(backend);
     expect(s.load()).toEqual({
-      version: 2,
+      version: 3,
       unlockedLevel: 7,
       bestTimes: { 1: 55, 2: 66 },
       soundOn: true,
+      endless: { streak: 0, bestStreak: 0 },
     });
     expect(JSON.parse(backend.map.get(SAVE_KEY)!)).toEqual({
-      version: 2,
+      version: 3,
       unlockedLevel: 7,
       bestTimes: { 1: 55, 2: 66 },
       soundOn: true,
+      endless: { streak: 0, bestStreak: 0 },
     });
   });
 
@@ -114,7 +129,13 @@ describe("createStorage", () => {
         [SAVE_KEY]: '{"version":1,"unlockedLevel":"abc","bestTimes":{"2":88,"5":"bad"}}',
       }),
     );
-    expect(s.load()).toEqual({ version: 2, unlockedLevel: 1, bestTimes: { 2: 88 }, soundOn: true });
+    expect(s.load()).toEqual({
+      version: 3,
+      unlockedLevel: 1,
+      bestTimes: { 2: 88 },
+      soundOn: true,
+      endless: { streak: 0, bestStreak: 0 },
+    });
   });
 });
 
@@ -157,5 +178,75 @@ describe("soundOn 音效开关持久化(v2.1)", () => {
       memBackend({ [SAVE_KEY]: '{"version":1,"unlockedLevel":5,"bestTimes":{"1":60}}' }),
     );
     expect(s.load().soundOn).toBe(true);
+  });
+});
+
+describe("存档 v3(v2.2 规格 §3.4)", () => {
+  it("v2→v3 迁移:1-20 成绩保留、21-50 丢弃、进度与静音保留、立即持久化", () => {
+    const backend = memBackend({
+      [SAVE_KEY]: JSON.stringify({
+        version: 2,
+        unlockedLevel: 43,
+        bestTimes: { 1: 55, 20: 700, 21: 800, 35: 900, 50: 1200 },
+        soundOn: false,
+      }),
+    });
+    const s = createStorage(backend);
+    expect(s.load()).toEqual({
+      version: 3,
+      unlockedLevel: 43,
+      bestTimes: { 1: 55, 20: 700 },
+      soundOn: false,
+      endless: { streak: 0, bestStreak: 0 },
+    });
+    expect(JSON.parse(backend.map.get(SAVE_KEY)!)["version"]).toBe(3);
+  });
+
+  it("recordEndlessWin:连胜+1、破纪录判定、持久化", () => {
+    const backend = memBackend();
+    const s = createStorage(backend);
+    expect(s.recordEndlessWin()).toEqual({ streak: 1, bestStreak: 1, newBest: true });
+    expect(s.recordEndlessWin()).toEqual({ streak: 2, bestStreak: 2, newBest: true });
+    expect(createStorage(backend).load().endless).toEqual({ streak: 2, bestStreak: 2 });
+  });
+
+  it("recordEndlessLoss:连胜归零、最长保留;再胜不破纪录直到超过", () => {
+    const s = createStorage(memBackend());
+    s.recordEndlessWin();
+    s.recordEndlessWin();
+    s.recordEndlessLoss();
+    expect(s.load().endless).toEqual({ streak: 0, bestStreak: 2 });
+    expect(s.recordEndlessWin()).toEqual({ streak: 1, bestStreak: 2, newBest: false });
+    s.recordEndlessWin();
+    expect(s.recordEndlessWin()).toEqual({ streak: 3, bestStreak: 3, newBest: true });
+  });
+
+  it("endless 字段损坏回退默认;bestStreak < streak 时自洽修正", () => {
+    const bad = createStorage(
+      memBackend({
+        [SAVE_KEY]:
+          '{"version":3,"unlockedLevel":1,"bestTimes":{},"soundOn":true,"endless":{"streak":-1,"bestStreak":"x"}}',
+      }),
+    );
+    expect(bad.load().endless).toEqual({ streak: 0, bestStreak: 0 });
+    const fix = createStorage(
+      memBackend({
+        [SAVE_KEY]:
+          '{"version":3,"unlockedLevel":1,"bestTimes":{},"soundOn":true,"endless":{"streak":5,"bestStreak":2}}',
+      }),
+    );
+    expect(fix.load().endless).toEqual({ streak: 5, bestStreak: 5 });
+  });
+
+  it("recordWin 与 setSoundOn 不影响 endless;endless 记录不影响进度", () => {
+    const s = createStorage(memBackend());
+    s.recordEndlessWin();
+    s.recordWin(1, 60);
+    s.setSoundOn(false);
+    expect(s.load().endless).toEqual({ streak: 1, bestStreak: 1 });
+    s.recordEndlessLoss();
+    expect(s.load().unlockedLevel).toBe(2);
+    expect(s.load().bestTimes[1]).toBe(60);
+    expect(s.load().soundOn).toBe(false);
   });
 });

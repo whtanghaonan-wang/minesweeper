@@ -2,11 +2,17 @@ import { LEVELS } from "./levels";
 
 export const SAVE_KEY = "minesweeper-save-v1"; // localStorage 键名不变，内容版本升级
 
+export interface EndlessData {
+  streak: number;
+  bestStreak: number;
+}
+
 export interface SaveData {
-  version: 2;
+  version: 3;
   unlockedLevel: number;
   bestTimes: Record<number, number>;
   soundOn: boolean;
+  endless: EndlessData;
 }
 
 export interface WinRecord {
@@ -15,11 +21,19 @@ export interface WinRecord {
   persisted: boolean;
 }
 
+export interface EndlessWinRecord {
+  streak: number;
+  bestStreak: number;
+  newBest: boolean;
+}
+
 export interface GameStorage {
   load(): SaveData;
   save(d: SaveData): boolean;
   recordWin(levelId: number, timeSec: number): WinRecord;
   setSoundOn(on: boolean): boolean;
+  recordEndlessWin(): EndlessWinRecord;
+  recordEndlessLoss(): void;
 }
 
 type Backend = Pick<globalThis.Storage, "getItem" | "setItem">;
@@ -41,7 +55,13 @@ const V1_SPECS: Record<number, [number, number, number]> = {
 };
 
 function defaults(): SaveData {
-  return { version: 2, unlockedLevel: 1, bestTimes: {}, soundOn: true };
+  return {
+    version: 3,
+    unlockedLevel: 1,
+    bestTimes: {},
+    soundOn: true,
+    endless: { streak: 0, bestStreak: 0 },
+  };
 }
 
 /** 逐项校验 unlockedLevel/bestTimes，损坏字段回退默认、合法字段保留 */
@@ -64,13 +84,41 @@ function readFields(r: Record<string, unknown>): SaveData {
     }
   }
   if (typeof r["soundOn"] === "boolean") d.soundOn = r["soundOn"];
+  const e = r["endless"];
+  if (typeof e === "object" && e !== null) {
+    const es = e as Record<string, unknown>;
+    if (
+      typeof es["streak"] === "number" &&
+      Number.isInteger(es["streak"]) &&
+      es["streak"] >= 0
+    ) {
+      d.endless.streak = es["streak"];
+    }
+    if (
+      typeof es["bestStreak"] === "number" &&
+      Number.isInteger(es["bestStreak"]) &&
+      es["bestStreak"] >= 0
+    ) {
+      d.endless.bestStreak = es["bestStreak"];
+    }
+    // 自洽:最长连胜不得低于当前连胜
+    if (d.endless.bestStreak < d.endless.streak) d.endless.bestStreak = d.endless.streak;
+  }
   return d;
 }
 
 function sanitize(raw: unknown): SaveData {
   if (typeof raw !== "object" || raw === null) return defaults();
   const r = raw as Record<string, unknown>;
-  if (r["version"] === 2) return readFields(r);
+  if (r["version"] === 3) return readFields(r);
+  if (r["version"] === 2) {
+    // v2 迁移:进度/静音继承;21-50 盘面规格全变,旧成绩不可比,迁移即弃(规格 §3.4)
+    const v2 = readFields(r);
+    for (const k of Object.keys(v2.bestTimes)) {
+      if (Number(k) >= 21) delete v2.bestTimes[Number(k)];
+    }
+    return v2;
+  }
   if (r["version"] === 1) {
     // v1 迁移：进度继承；成绩仅保留盘面规格未变的关
     const v1 = readFields(r);
@@ -108,18 +156,18 @@ export function createStorage(backend?: Backend): GameStorage {
     if (raw != null) {
       const parsed: unknown = JSON.parse(raw);
       data = sanitize(parsed);
-      // v1 迁移结果立即持久化，避免下次再迁移
-      if ((parsed as { version?: unknown } | null)?.["version"] === 1) save(data);
+      const ver = (parsed as { version?: unknown } | null)?.["version"];
+      if (ver === 1 || ver === 2) save(data); // 迁移结果立即持久化，避免下次再迁移
     }
   } catch {
     // 读失败/损坏 → 使用默认值，内存态继续工作
   }
 
   return {
-    load: () => ({ ...data, bestTimes: { ...data.bestTimes } }),
+    load: () => ({ ...data, bestTimes: { ...data.bestTimes }, endless: { ...data.endless } }),
     save,
     recordWin(levelId, timeSec) {
-      const d = { ...data, bestTimes: { ...data.bestTimes } };
+      const d = { ...data, bestTimes: { ...data.bestTimes }, endless: { ...data.endless } };
       const prev = d.bestTimes[levelId];
       const newBest = prev === undefined || timeSec < prev;
       if (newBest) d.bestTimes[levelId] = timeSec;
@@ -132,7 +180,21 @@ export function createStorage(backend?: Backend): GameStorage {
       return { newBest, unlocked, persisted };
     },
     setSoundOn(on) {
-      return save({ ...data, bestTimes: { ...data.bestTimes }, soundOn: on });
+      return save({ ...data, bestTimes: { ...data.bestTimes }, endless: { ...data.endless }, soundOn: on });
+    },
+    recordEndlessWin() {
+      const streak = data.endless.streak + 1;
+      const newBest = streak > data.endless.bestStreak;
+      const bestStreak = Math.max(data.endless.bestStreak, streak);
+      save({ ...data, bestTimes: { ...data.bestTimes }, endless: { streak, bestStreak } });
+      return { streak, bestStreak, newBest };
+    },
+    recordEndlessLoss() {
+      save({
+        ...data,
+        bestTimes: { ...data.bestTimes },
+        endless: { streak: 0, bestStreak: data.endless.bestStreak },
+      });
     },
   };
 }
