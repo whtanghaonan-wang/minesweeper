@@ -284,22 +284,23 @@ button:focus-visible {
 
 /* ===== 游戏页 ===== */
 .game {
+  position: relative;
   width: 100%;
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: max(0.875rem, env(safe-area-inset-top) + 0.375rem) 1rem
-    calc(1rem + env(safe-area-inset-bottom));
+  height: 100dvh;
 }
 
 .game-top {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  max-width: 35rem;
   display: flex;
   align-items: center;
   gap: 0.625rem;
-  max-width: 35rem;
-  width: 100%;
-  margin: 0 auto;
+  padding: max(0.875rem, env(safe-area-inset-top) + 0.375rem) 1rem 0.625rem;
 }
 
 .pill {
@@ -359,10 +360,9 @@ button.pill:active {
 
 /* ===== 棋盘 ===== */
 .board-viewport {
-  flex: 1;
-  position: relative;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  min-height: 0;
   touch-action: none;
 }
 
@@ -462,13 +462,25 @@ button.pill:active {
 
 /* ===== 底部操作区 ===== */
 .game-bottom {
+  position: absolute;
+  z-index: 2;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  max-width: 35rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.625rem 1rem calc(1rem + env(safe-area-inset-bottom));
+}
+
+.bottom-actions {
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 0.75rem;
-  max-width: 35rem;
-  width: 100%;
-  margin: 0 auto;
 }
 
 .mode-toggle {

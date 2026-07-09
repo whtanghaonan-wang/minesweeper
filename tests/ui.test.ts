@@ -336,6 +336,14 @@ describe("游戏页", () => {
     expect(vi.mocked(audio.setMuted)).toHaveBeenCalledWith(true);
     expect(toggles).toEqual([false]);
   });
+
+  it("悬浮布局:提示行并入底栏,操作行有包裹容器", () => {
+    start();
+    expect(root.querySelector(".game-bottom .pc-hint")).not.toBeNull();
+    expect(root.querySelector(".game-bottom .bottom-actions .mode-toggle")).not.toBeNull();
+    expect(root.querySelector(".game-bottom .bottom-actions .restart")).not.toBeNull();
+    expect(root.querySelector(".game > .board-viewport")).not.toBeNull();
+  });
 });
 
 describe("结算弹窗", () => {

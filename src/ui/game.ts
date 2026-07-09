@@ -118,6 +118,8 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
 
   const bottom = document.createElement("footer");
   bottom.className = "game-bottom";
+  const bottomActions = document.createElement("div");
+  bottomActions.className = "bottom-actions";
   const modeToggle = document.createElement("div");
   modeToggle.className = "mode-toggle";
   modeToggle.setAttribute("role", "group");
@@ -126,12 +128,13 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   const flagBtn = button("mode-btn", "🚩 插旗", () => setMode("flag"));
   modeToggle.append(digBtn, flagBtn);
   const restartBtn = button("pill restart", "↻ 重开", restart);
-  bottom.append(modeToggle, restartBtn);
+  bottomActions.append(modeToggle, restartBtn);
 
   const hint = document.createElement("p");
   hint.className = "pc-hint";
   hint.textContent = "左键挖开 · 右键插旗 · 滚轮缩放 · 拖动平移";
-  game.append(top, boardVp, bottom, hint);
+  bottom.append(bottomActions, hint);
+  game.append(top, boardVp, bottom);
   root.replaceChildren(game);
 
   updateStats();
@@ -142,7 +145,14 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   let lastFit = 1;
 
   function metrics(): Metrics {
-    return { viewW: boardVp.clientWidth, viewH: boardVp.clientHeight, boardW, boardH };
+    return {
+      viewW: boardVp.clientWidth,
+      viewH: boardVp.clientHeight,
+      boardW,
+      boardH,
+      insetTop: top.offsetHeight,
+      insetBottom: bottom.offsetHeight,
+    };
   }
 
   function applyView(): void {
