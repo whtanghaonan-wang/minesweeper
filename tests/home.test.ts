@@ -67,6 +67,13 @@ describe("首页", () => {
     expect(fill.style.width).toBe("4%"); // 2/50
   });
 
+  it("0 秒成绩重载后首页仍显示 0:00", () => {
+    const backend = memBackend();
+    createStorage(backend).recordWin(1, 0);
+    show(createStorage(backend));
+    expect(root.querySelector(".home-stats")!.textContent).toContain("0:00");
+  });
+
   it("全通:再战·第 50 关", () => {
     const storage = createStorage(memBackend());
     for (const l of LEVELS) storage.recordWin(l.id, 100);

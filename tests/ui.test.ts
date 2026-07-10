@@ -101,6 +101,19 @@ describe("选关页", () => {
     expect(played).toEqual([2]);
   });
 
+  it("0 秒成绩重载后在节点文字和 aria-label 中都显示 0:00", () => {
+    const backend = memBackend();
+    createStorage(backend).recordWin(1, 0);
+    showMenu(root, {
+      storage: createStorage(backend),
+      onPlay: () => {},
+      onBack: () => {},
+    });
+    const first = root.querySelector<HTMLButtonElement>(".vine-node")!;
+    expect(first.querySelector(".vn-best")!.textContent).toBe("0:00");
+    expect(first.getAttribute("aria-label")).toContain("0:00");
+  });
+
   it("返回钮回首页回调", () => {
     let back = 0;
     showMenu(root, {

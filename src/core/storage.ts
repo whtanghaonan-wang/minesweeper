@@ -1,6 +1,7 @@
 import { LEVELS } from "./levels";
 
-export const SAVE_KEY = "minesweeper-save-v1"; // localStorage 键名不变，内容版本升级
+export const SAVE_KEY = "minesweeper-save-v3";
+export const LEGACY_SAVE_KEY = "minesweeper-save-v1";
 
 export interface EndlessData {
   streak: number;
@@ -40,6 +41,10 @@ type Backend = Pick<globalThis.Storage, "getItem" | "setItem">;
 
 const MAX_LEVEL = LEVELS[LEVELS.length - 1]!.id;
 
+function isValidTime(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0;
+}
+
 /** v1 关卡盘面规格（宽,高,雷），迁移时判断旧最好成绩是否仍可比 */
 const V1_SPECS: Record<number, [number, number, number]> = {
   1: [8, 8, 7],
@@ -78,7 +83,7 @@ function readFields(r: Record<string, unknown>): SaveData {
   if (typeof r["bestTimes"] === "object" && r["bestTimes"] !== null) {
     for (const [k, v] of Object.entries(r["bestTimes"])) {
       const id = Number(k);
-      if (Number.isInteger(id) && id >= 1 && id <= MAX_LEVEL && typeof v === "number" && v > 0) {
+      if (Number.isInteger(id) && id >= 1 && id <= MAX_LEVEL && isValidTime(v)) {
         d.bestTimes[id] = v;
       }
     }
@@ -151,16 +156,26 @@ export function createStorage(backend?: Backend): GameStorage {
     }
   };
 
+  let protectedMissing = false;
   try {
-    const raw = backend?.getItem(SAVE_KEY);
-    if (raw != null) {
-      const parsed: unknown = JSON.parse(raw);
-      data = sanitize(parsed);
-      const ver = (parsed as { version?: unknown } | null)?.["version"];
-      if (ver === 1 || ver === 2) save(data); // 迁移结果立即持久化，避免下次再迁移
-    }
+    const protectedRaw = backend?.getItem(SAVE_KEY);
+    protectedMissing = protectedRaw == null;
+    if (protectedRaw != null) data = sanitize(JSON.parse(protectedRaw) as unknown);
   } catch {
-    // 读失败/损坏 → 使用默认值，内存态继续工作
+    protectedMissing = false;
+    data = defaults();
+  }
+
+  if (protectedMissing) {
+    try {
+      const legacyRaw = backend?.getItem(LEGACY_SAVE_KEY);
+      if (legacyRaw != null) {
+        data = sanitize(JSON.parse(legacyRaw) as unknown);
+        backend?.setItem(SAVE_KEY, JSON.stringify(data));
+      }
+    } catch {
+      // legacy 读取或首次 protected 写入失败：会话仍使用已完成 sanitize 的 data。
+    }
   }
 
   return {
@@ -169,7 +184,8 @@ export function createStorage(backend?: Backend): GameStorage {
     recordWin(levelId, timeSec) {
       const d = { ...data, bestTimes: { ...data.bestTimes }, endless: { ...data.endless } };
       const prev = d.bestTimes[levelId];
-      const newBest = prev === undefined || timeSec < prev;
+      const validTime = isValidTime(timeSec);
+      const newBest = validTime && (prev === undefined || timeSec < prev);
       if (newBest) d.bestTimes[levelId] = timeSec;
       let unlocked: number | null = null;
       if (levelId < MAX_LEVEL && d.unlockedLevel === levelId) {
