@@ -26,15 +26,24 @@ export interface EndlessWinRecord {
   streak: number;
   bestStreak: number;
   newBest: boolean;
+  persisted: boolean;
 }
+
+export interface EndlessLossRecord {
+  streak: 0;
+  bestStreak: number;
+  persisted: boolean;
+}
+
+export type FlushResult = "idle" | "saved" | "failed";
 
 export interface GameStorage {
   load(): SaveData;
-  save(d: SaveData): boolean;
+  flushPending(): FlushResult;
   recordWin(levelId: number, timeSec: number): WinRecord;
   setSoundOn(on: boolean): boolean;
   recordEndlessWin(): EndlessWinRecord;
-  recordEndlessLoss(): void;
+  recordEndlessLoss(): EndlessLossRecord;
 }
 
 type Backend = Pick<globalThis.Storage, "getItem" | "setItem">;
@@ -67,6 +76,10 @@ function defaults(): SaveData {
     soundOn: true,
     endless: { streak: 0, bestStreak: 0 },
   };
+}
+
+function clone(d: SaveData): SaveData {
+  return { ...d, bestTimes: { ...d.bestTimes }, endless: { ...d.endless } };
 }
 
 /** 逐项校验 unlockedLevel/bestTimes，损坏字段回退默认、合法字段保留 */
@@ -144,9 +157,9 @@ function sanitize(raw: unknown): SaveData {
 
 export function createStorage(backend?: Backend): GameStorage {
   let data = defaults();
+  let pending: SaveData | null = null;
 
-  const save = (d: SaveData): boolean => {
-    data = d;
+  const writeProtected = (d: SaveData): boolean => {
     if (!backend) return false;
     try {
       backend.setItem(SAVE_KEY, JSON.stringify(d));
@@ -154,6 +167,20 @@ export function createStorage(backend?: Backend): GameStorage {
     } catch {
       return false;
     }
+  };
+
+  const commitLatest = (next: SaveData): boolean => {
+    data = clone(next);
+    const persisted = writeProtected(data);
+    pending = persisted ? null : clone(data);
+    return persisted;
+  };
+
+  const flushPending = (): FlushResult => {
+    if (pending === null) return "idle";
+    if (!writeProtected(pending)) return "failed";
+    pending = null;
+    return "saved";
   };
 
   let protectedMissing = false;
@@ -170,19 +197,19 @@ export function createStorage(backend?: Backend): GameStorage {
     try {
       const legacyRaw = backend?.getItem(LEGACY_SAVE_KEY);
       if (legacyRaw != null) {
-        data = sanitize(JSON.parse(legacyRaw) as unknown);
-        backend?.setItem(SAVE_KEY, JSON.stringify(data));
+        commitLatest(sanitize(JSON.parse(legacyRaw) as unknown));
       }
     } catch {
-      // legacy 读取或首次 protected 写入失败：会话仍使用已完成 sanitize 的 data。
+      data = defaults();
+      pending = null;
     }
   }
 
   return {
-    load: () => ({ ...data, bestTimes: { ...data.bestTimes }, endless: { ...data.endless } }),
-    save,
+    load: () => clone(data),
+    flushPending,
     recordWin(levelId, timeSec) {
-      const d = { ...data, bestTimes: { ...data.bestTimes }, endless: { ...data.endless } };
+      const d = clone(data);
       const prev = d.bestTimes[levelId];
       const validTime = isValidTime(timeSec);
       const newBest = validTime && (prev === undefined || timeSec < prev);
@@ -192,25 +219,29 @@ export function createStorage(backend?: Backend): GameStorage {
         d.unlockedLevel = levelId + 1;
         unlocked = d.unlockedLevel;
       }
-      const persisted = save(d);
+      const persisted = commitLatest(d);
       return { newBest, unlocked, persisted };
     },
     setSoundOn(on) {
-      return save({ ...data, bestTimes: { ...data.bestTimes }, endless: { ...data.endless }, soundOn: on });
+      const d = clone(data);
+      d.soundOn = on;
+      return commitLatest(d);
     },
     recordEndlessWin() {
-      const streak = data.endless.streak + 1;
-      const newBest = streak > data.endless.bestStreak;
-      const bestStreak = Math.max(data.endless.bestStreak, streak);
-      save({ ...data, bestTimes: { ...data.bestTimes }, endless: { streak, bestStreak } });
-      return { streak, bestStreak, newBest };
+      const d = clone(data);
+      const streak = d.endless.streak + 1;
+      const newBest = streak > d.endless.bestStreak;
+      const bestStreak = Math.max(d.endless.bestStreak, streak);
+      d.endless = { streak, bestStreak };
+      const persisted = commitLatest(d);
+      return { streak, bestStreak, newBest, persisted };
     },
     recordEndlessLoss() {
-      save({
-        ...data,
-        bestTimes: { ...data.bestTimes },
-        endless: { streak: 0, bestStreak: data.endless.bestStreak },
-      });
+      const d = clone(data);
+      d.endless.streak = 0;
+      const bestStreak = d.endless.bestStreak;
+      const persisted = commitLatest(d);
+      return { streak: 0, bestStreak, persisted };
     },
   };
 }

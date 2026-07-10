@@ -10,6 +10,22 @@ function memBackend(initial?: Record<string, string>) {
   };
 }
 
+function switchableBackend(initial?: Record<string, string>) {
+  const backend = memBackend(initial);
+  let failWrites = false;
+  return {
+    getItem: backend.getItem,
+    setItem: (k: string, v: string) => {
+      if (failWrites) throw new Error("quota");
+      backend.setItem(k, v);
+    },
+    setFailWrites: (fail: boolean) => {
+      failWrites = fail;
+    },
+    map: backend.map,
+  };
+}
+
 describe("createStorage", () => {
   it("v2.3 使用独立 protected key，legacy key 只用于首次迁移", () => {
     expect(SAVE_KEY).toBe("minesweeper-save-v3");
@@ -202,6 +218,28 @@ describe("createStorage", () => {
     expect(s.load().bestTimes[3]).toBe(42);
   });
 
+  it("无 backend 时保留会话最新状态和 pending，load 返回深拷贝", () => {
+    const s = createStorage(undefined);
+    expect(s.recordEndlessWin()).toEqual({
+      streak: 1,
+      bestStreak: 1,
+      newBest: true,
+      persisted: false,
+    });
+    expect(s.flushPending()).toBe("failed");
+
+    const copy = s.load();
+    copy.endless.streak = 99;
+    copy.bestTimes[1] = 99;
+    expect(s.load()).toEqual({
+      version: 3,
+      unlockedLevel: 1,
+      bestTimes: {},
+      soundOn: true,
+      endless: { streak: 1, bestStreak: 1 },
+    });
+  });
+
   it("v1 存档迁移：进度继承，成绩仅保留规格未变的第 1、2 关，且立即持久化", () => {
     const legacy = JSON.stringify({
       version: 1,
@@ -318,8 +356,18 @@ describe("存档 v3(v2.2 规格 §3.4)", () => {
   it("recordEndlessWin:连胜+1、破纪录判定、持久化", () => {
     const backend = memBackend();
     const s = createStorage(backend);
-    expect(s.recordEndlessWin()).toEqual({ streak: 1, bestStreak: 1, newBest: true });
-    expect(s.recordEndlessWin()).toEqual({ streak: 2, bestStreak: 2, newBest: true });
+    expect(s.recordEndlessWin()).toEqual({
+      streak: 1,
+      bestStreak: 1,
+      newBest: true,
+      persisted: true,
+    });
+    expect(s.recordEndlessWin()).toEqual({
+      streak: 2,
+      bestStreak: 2,
+      newBest: true,
+      persisted: true,
+    });
     expect(createStorage(backend).load().endless).toEqual({ streak: 2, bestStreak: 2 });
   });
 
@@ -327,11 +375,92 @@ describe("存档 v3(v2.2 规格 §3.4)", () => {
     const s = createStorage(memBackend());
     s.recordEndlessWin();
     s.recordEndlessWin();
-    s.recordEndlessLoss();
+    expect(s.recordEndlessLoss()).toEqual({ streak: 0, bestStreak: 2, persisted: true });
     expect(s.load().endless).toEqual({ streak: 0, bestStreak: 2 });
-    expect(s.recordEndlessWin()).toEqual({ streak: 1, bestStreak: 2, newBest: false });
+    expect(s.recordEndlessWin()).toEqual({
+      streak: 1,
+      bestStreak: 2,
+      newBest: false,
+      persisted: true,
+    });
     s.recordEndlessWin();
-    expect(s.recordEndlessWin()).toEqual({ streak: 3, bestStreak: 3, newBest: true });
+    expect(s.recordEndlessWin()).toEqual({
+      streak: 3,
+      bestStreak: 3,
+      newBest: true,
+      persisted: true,
+    });
+  });
+
+  it("pending 只保留最新完整快照，flush 不会复活中间连胜", () => {
+    const backend = switchableBackend();
+    const s = createStorage(backend);
+    expect(s.flushPending()).toBe("idle");
+
+    backend.setFailWrites(true);
+    expect(s.recordEndlessWin()).toEqual({
+      streak: 1,
+      bestStreak: 1,
+      newBest: true,
+      persisted: false,
+    });
+    expect(s.flushPending()).toBe("failed");
+    expect(s.recordEndlessLoss()).toEqual({ streak: 0, bestStreak: 1, persisted: false });
+
+    backend.setFailWrites(false);
+    expect(s.flushPending()).toBe("saved");
+    expect(s.flushPending()).toBe("idle");
+    expect(createStorage(backend).load().endless).toEqual({ streak: 0, bestStreak: 1 });
+  });
+
+  it("成功 setSoundOn 会合并 endless pending 并清空 pending", () => {
+    const backend = switchableBackend();
+    const s = createStorage(backend);
+    backend.setFailWrites(true);
+    expect(s.recordEndlessWin().persisted).toBe(false);
+
+    backend.setFailWrites(false);
+    expect(s.setSoundOn(false)).toBe(true);
+    expect(s.flushPending()).toBe("idle");
+    expect(createStorage(backend).load()).toMatchObject({
+      soundOn: false,
+      endless: { streak: 1, bestStreak: 1 },
+    });
+  });
+
+  it("成功 setSoundOn 会合并普通胜利 pending 并清空 pending", () => {
+    const backend = switchableBackend();
+    const s = createStorage(backend);
+    backend.setFailWrites(true);
+    expect(s.recordWin(1, 12)).toEqual({ newBest: true, unlocked: 2, persisted: false });
+
+    backend.setFailWrites(false);
+    expect(s.setSoundOn(false)).toBe(true);
+    expect(s.flushPending()).toBe("idle");
+    expect(createStorage(backend).load()).toMatchObject({
+      unlockedLevel: 2,
+      bestTimes: { 1: 12 },
+      soundOn: false,
+    });
+  });
+
+  it("legacy 首次迁移写 protected 失败时进入 pending，flush 后完整保存", () => {
+    const legacyData = {
+      version: 3,
+      unlockedLevel: 8,
+      bestTimes: { 1: 0 },
+      soundOn: false,
+      endless: { streak: 2, bestStreak: 3 },
+    };
+    const backend = switchableBackend({ [LEGACY_SAVE_KEY]: JSON.stringify(legacyData) });
+    backend.setFailWrites(true);
+    const s = createStorage(backend);
+    expect(s.load()).toEqual(legacyData);
+    expect(s.flushPending()).toBe("failed");
+
+    backend.setFailWrites(false);
+    expect(s.flushPending()).toBe("saved");
+    expect(createStorage(backend).load()).toEqual(legacyData);
   });
 
   it("endless 字段损坏回退默认;bestStreak < streak 时自洽修正", () => {
