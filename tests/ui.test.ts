@@ -501,6 +501,7 @@ describe("结算弹窗", () => {
       newBest: true,
       persisted: true,
       hasNext: true,
+      backgroundRoot: root,
       onNext: () => next++,
       onRetry: () => {},
       onMenu: () => {},
@@ -523,6 +524,7 @@ describe("结算弹窗", () => {
       newBest: false,
       persisted: true,
       hasNext: false,
+      backgroundRoot: root,
       onNext: () => {},
       onRetry: () => {},
       onMenu: () => {},
@@ -541,6 +543,7 @@ describe("结算弹窗", () => {
       newBest: false,
       persisted: false,
       hasNext: false,
+      backgroundRoot: root,
       onNext: () => {},
       onRetry: () => {},
       onMenu: () => {},
@@ -556,6 +559,7 @@ describe("结算弹窗", () => {
     let menu = 0;
     showResult({
       won: true, timeSec: 100, newBest: true, persisted: true, hasNext: true,
+      backgroundRoot: root,
       endless: { streak: 7 },
       onNext: () => next++, onRetry: () => {}, onMenu: () => menu++,
     });
@@ -573,6 +577,7 @@ describe("结算弹窗", () => {
   it("无尽·负:连胜止于 N、再来一盘", () => {
     showResult({
       won: false, reason: "mine", timeSec: 50, newBest: false, persisted: true, hasNext: false,
+      backgroundRoot: root,
       endless: { streak: 4 },
       onNext: () => {}, onRetry: () => {}, onMenu: () => {},
     });

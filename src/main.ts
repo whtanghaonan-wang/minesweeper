@@ -39,6 +39,12 @@ function notePersisted(persisted: boolean): void {
   syncPersistenceWarning();
 }
 
+function resultRestoreFocus(): HTMLElement | null {
+  return root.querySelector<HTMLElement>("[data-result-focus]") ??
+    (document.activeElement instanceof HTMLElement && root.contains(document.activeElement)
+      ? document.activeElement : null);
+}
+
 function retryPending(): void {
   const result = storage.flushPending();
   if (result === "saved") persistenceWarning = false;
@@ -87,6 +93,8 @@ function gotoGame(level: LevelSpec): void {
         newBest: rec?.newBest ?? false,
         persisted: rec?.persisted ?? !persistenceWarning,
         hasNext: result.won && next !== undefined,
+        backgroundRoot: root,
+        restoreFocus: resultRestoreFocus(),
         onNext: () => next && gotoGame(next),
         onRetry: () => gotoGame(level),
         onMenu: gotoMenu,
@@ -115,6 +123,8 @@ function gotoEndless(): void {
           persisted: rec.persisted,
           hasNext: true,
           endless: { streak: rec.streak },
+          backgroundRoot: root,
+          restoreFocus: resultRestoreFocus(),
           onNext: gotoEndless,
           onRetry: gotoEndless,
           onMenu: gotoHome,
@@ -131,6 +141,8 @@ function gotoEndless(): void {
           persisted: rec.persisted,
           hasNext: false,
           endless: { streak: ended },
+          backgroundRoot: root,
+          restoreFocus: resultRestoreFocus(),
           onNext: gotoEndless,
           onRetry: gotoEndless, // 再来一盘:连胜已归零,回起步盘
           onMenu: gotoHome,

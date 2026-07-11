@@ -162,6 +162,36 @@ afterEach(() => {
 });
 
 describe("应用壳持久化可靠性", () => {
+  it("结算传入应用背景并优先保存最后操作格作为焦点", async () => {
+    await boot();
+    h.home!.onContinue(campaignLevel);
+    const root = document.querySelector<HTMLElement>("#app")!;
+    const active = document.createElement("button");
+    const actionTarget = document.createElement("button");
+    actionTarget.dataset["resultFocus"] = "true";
+    root.append(active, actionTarget);
+    active.focus();
+
+    h.game!.onFinish({ won: true, timeSec: 9 });
+
+    expect(h.result!.backgroundRoot).toBe(root);
+    expect(h.result!.restoreFocus).toBe(actionTarget);
+  });
+
+  it("没有最后操作格时使用应用内当前焦点", async () => {
+    await boot();
+    h.home!.onContinue(campaignLevel);
+    const root = document.querySelector<HTMLElement>("#app")!;
+    const active = document.createElement("button");
+    root.append(active);
+    active.focus();
+
+    h.game!.onFinish({ won: false, reason: "mine", timeSec: 5 });
+
+    expect(h.result!.backgroundRoot).toBe(root);
+    expect(h.result!.restoreFocus).toBe(active);
+  });
+
   it("启动首页重试一次，进入选关前再重试一次", async () => {
     await boot();
 
