@@ -13,6 +13,7 @@ import type { GameDeps } from "../src/ui/game";
 import type { HomeDeps } from "../src/ui/home";
 import type { MenuDeps } from "../src/ui/menu";
 import type { ResultOptions } from "../src/ui/result";
+import type { UiPrefsStore } from "../src/ui/ui-prefs";
 
 const h = vi.hoisted(() => ({
   storage: {
@@ -32,11 +33,23 @@ const h = vi.hoisted(() => ({
   setMuted: vi.fn(),
   endlessSpec: vi.fn(),
   mulberry32: vi.fn(),
+  uiPrefs: {
+    load: vi.fn(),
+    setLargeBoardHintSeen: vi.fn(),
+    setReducedTransparency: vi.fn(),
+  } satisfies UiPrefsStore,
+  createUiPrefs: vi.fn(),
+  applyReducedTransparency: vi.fn(),
+  cancelAllLiquidGlass: vi.fn(),
+  destroyLiquidGlass: vi.fn(),
+  installLiquidGlass: vi.fn(),
   home: undefined as HomeDeps | undefined,
   menu: undefined as MenuDeps | undefined,
   game: undefined as GameDeps | undefined,
   result: undefined as ResultOptions | undefined,
   visibilityHandler: undefined as (() => void) | undefined,
+  pagehideHandler: undefined as ((event: PageTransitionEvent) => void) | undefined,
+  pagehideOptions: undefined as boolean | AddEventListenerOptions | undefined,
 }));
 
 vi.mock("../src/core/storage", () => ({
@@ -75,6 +88,19 @@ vi.mock("../src/ui/persistence-warning", () => ({
 vi.mock("../src/ui/audio", () => ({ setMuted: h.setMuted }));
 vi.mock("../src/core/endless", () => ({ endlessSpec: h.endlessSpec }));
 vi.mock("../src/core/rng", () => ({ mulberry32: h.mulberry32 }));
+vi.mock("../src/ui/ui-prefs", () => ({
+  createUiPrefs: (backend: unknown) => {
+    h.createUiPrefs(backend);
+    return h.uiPrefs;
+  },
+  applyReducedTransparency: h.applyReducedTransparency,
+}));
+vi.mock("../src/ui/liquid-glass", () => ({
+  installLiquidGlass: (root: Document) => {
+    h.installLiquidGlass(root);
+    return { cancelAll: h.cancelAllLiquidGlass, destroy: h.destroyLiquidGlass };
+  },
+}));
 
 const campaignLevel = {
   id: 1,
@@ -88,6 +114,7 @@ const endlessLevel = { ...campaignLevel, id: 999 } as LevelSpec;
 const rng = (): number => 0.5;
 
 let addEventListenerSpy: ReturnType<typeof vi.spyOn>;
+let windowAddEventListenerSpy: ReturnType<typeof vi.spyOn>;
 
 async function boot(): Promise<void> {
   await import("../src/main");
@@ -110,6 +137,14 @@ beforeEach(() => {
   h.setMuted.mockReset();
   h.endlessSpec.mockReset();
   h.mulberry32.mockReset();
+  h.uiPrefs.load.mockReset();
+  h.uiPrefs.setLargeBoardHintSeen.mockReset();
+  h.uiPrefs.setReducedTransparency.mockReset();
+  h.createUiPrefs.mockReset();
+  h.applyReducedTransparency.mockReset();
+  h.cancelAllLiquidGlass.mockReset();
+  h.destroyLiquidGlass.mockReset();
+  h.installLiquidGlass.mockReset();
   document.body.innerHTML = '<div id="app"></div>';
   localStorage.clear();
   Reflect.deleteProperty(navigator, "serviceWorker");
@@ -120,6 +155,9 @@ beforeEach(() => {
   h.game = undefined;
   h.result = undefined;
   h.visibilityHandler = undefined;
+  h.pagehideHandler = undefined;
+  h.pagehideOptions = undefined;
+  h.uiPrefs.load.mockReturnValue({ largeBoardHintSeen: false, reducedTransparency: true });
   h.storage.load.mockReturnValue({
     version: 3,
     unlockedLevel: 1,
@@ -154,14 +192,70 @@ beforeEach(() => {
       realAddEventListener(type, listener, options);
     }) as typeof document.addEventListener,
   );
+  const realWindowAddEventListener = window.addEventListener.bind(window);
+  windowAddEventListenerSpy = vi.spyOn(window, "addEventListener").mockImplementation(
+    ((type: string, listener: EventListenerOrEventListenerObject, options?: boolean | AddEventListenerOptions) => {
+      if (type === "pagehide") {
+        h.pagehideOptions = options;
+        h.pagehideHandler = (event) => {
+          if (typeof listener === "function") listener.call(window, event);
+          else listener.handleEvent(event);
+        };
+        return;
+      }
+      realWindowAddEventListener(type, listener, options);
+    }) as typeof window.addEventListener,
+  );
 });
 
 afterEach(() => {
   addEventListenerSpy.mockRestore();
+  windowAddEventListenerSpy.mockRestore();
   document.body.innerHTML = "";
 });
 
 describe("应用壳持久化可靠性", () => {
+  it("启动前应用透明度偏好，玻璃控制器只初始化一次并复用于路由", async () => {
+    await boot();
+
+    expect(h.createUiPrefs).toHaveBeenCalledTimes(1);
+    expect(h.applyReducedTransparency).toHaveBeenCalledWith(true);
+    expect(h.applyReducedTransparency.mock.invocationCallOrder[0]).toBeLessThan(
+      h.showHome.mock.invocationCallOrder[0]!,
+    );
+    expect(h.installLiquidGlass).toHaveBeenCalledTimes(1);
+    expect(h.installLiquidGlass).toHaveBeenCalledWith(document);
+    expect(h.home!.uiPrefs).toBe(h.uiPrefs);
+
+    h.home!.onContinue(campaignLevel);
+    expect(h.game!.uiPrefs).toBe(h.uiPrefs);
+    h.game!.onExit();
+    h.menu!.onBack();
+    expect(h.installLiquidGlass).toHaveBeenCalledTimes(1);
+  });
+
+  it("进入 BFCache 时仅取消动画，恢复后普通 pagehide 仍会销毁", async () => {
+    await boot();
+    expect(h.pagehideHandler).toBeTypeOf("function");
+
+    const cached = Object.assign(new Event("pagehide"), { persisted: true }) as PageTransitionEvent;
+    h.pagehideHandler!(cached);
+
+    expect(h.cancelAllLiquidGlass).toHaveBeenCalledTimes(1);
+    expect(h.destroyLiquidGlass).not.toHaveBeenCalled();
+
+    const leaving = Object.assign(new Event("pagehide"), { persisted: false }) as PageTransitionEvent;
+    h.pagehideHandler!(leaving);
+
+    expect(h.destroyLiquidGlass).toHaveBeenCalledTimes(1);
+  });
+
+  it("pagehide 监听器保持可复用而不是 once", async () => {
+    await boot();
+
+    expect(typeof h.pagehideOptions === "object" ? h.pagehideOptions.once : false).not.toBe(true);
+  });
+
   it("结算传入应用背景并优先保存最后操作格作为焦点", async () => {
     await boot();
     h.home!.onContinue(campaignLevel);

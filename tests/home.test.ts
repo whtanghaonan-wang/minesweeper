@@ -4,6 +4,7 @@ import { LEVELS, type LevelSpec } from "../src/core/levels";
 import { createStorage } from "../src/core/storage";
 import { showHome } from "../src/ui/home";
 import { setMuted } from "../src/ui/audio";
+import { createUiPrefs } from "../src/ui/ui-prefs";
 
 vi.mock("../src/ui/audio", () => ({ setMuted: vi.fn() }));
 
@@ -22,6 +23,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   document.body.innerHTML = "";
+  delete document.documentElement.dataset["reducedTransparency"];
   vi.clearAllMocks();
 });
 
@@ -31,6 +33,7 @@ function show(storage = createStorage(memBackend()), over: Partial<Parameters<ty
   let endless = 0;
   showHome(root, {
     storage,
+    uiPrefs: createUiPrefs(memBackend()),
     version: "9.9.9-test",
     onContinue: (l) => played.push(l),
     onSelect: () => selected++,
@@ -41,6 +44,34 @@ function show(storage = createStorage(memBackend()), over: Partial<Parameters<ty
 }
 
 describe("首页", () => {
+  it("降低透明度按钮同步 aria-pressed、DOM 与独立偏好", () => {
+    const uiPrefs = createUiPrefs(memBackend());
+    show(createStorage(memBackend()), { uiPrefs });
+    const button = root.querySelector<HTMLButtonElement>(".transparency-btn")!;
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(button.getAttribute("aria-label")).toBe("降低透明度");
+    expect(button.textContent).toBe("◫ 玻璃");
+
+    button.click();
+
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(button.getAttribute("aria-label")).toBe("降低透明度");
+    expect(button.textContent).toBe("◼ 实色");
+    expect(uiPrefs.load().reducedTransparency).toBe(true);
+    expect(document.documentElement.dataset["reducedTransparency"]).toBe("true");
+  });
+
+  it("重新挂载首页时从共享 store 重新读取透明度偏好", () => {
+    const uiPrefs = createUiPrefs(memBackend());
+    show(createStorage(memBackend()), { uiPrefs });
+    root.querySelector<HTMLButtonElement>(".transparency-btn")!.click();
+
+    show(createStorage(memBackend()), { uiPrefs });
+
+    expect(root.querySelector(".transparency-btn")?.getAttribute("aria-pressed")).toBe("true");
+    expect(document.documentElement.dataset["reducedTransparency"]).toBe("true");
+  });
+
   it("首页挂载后主标题可程序聚焦", () => {
     show();
     const title = root.querySelector<HTMLHeadingElement>("h1")!;

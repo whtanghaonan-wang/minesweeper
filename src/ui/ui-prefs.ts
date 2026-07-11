@@ -14,6 +14,11 @@ export interface UiPrefsStore {
 type Backend = Pick<Storage, "getItem" | "setItem">;
 const defaults = (): UiPrefs => ({ largeBoardHintSeen: false, reducedTransparency: false });
 
+export function applyReducedTransparency(reduced: boolean): void {
+  if (reduced) document.documentElement.dataset["reducedTransparency"] = "true";
+  else delete document.documentElement.dataset["reducedTransparency"];
+}
+
 export function createUiPrefs(backend?: Backend): UiPrefsStore {
   let data = defaults();
   try {

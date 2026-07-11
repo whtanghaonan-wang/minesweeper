@@ -9,7 +9,8 @@ import { showResult } from "./ui/result";
 import { endlessSpec } from "./core/endless";
 import { mulberry32 } from "./core/rng";
 import { setPersistenceWarning } from "./ui/persistence-warning";
-import { createUiPrefs } from "./ui/ui-prefs";
+import { applyReducedTransparency, createUiPrefs } from "./ui/ui-prefs";
+import { installLiquidGlass } from "./ui/liquid-glass";
 
 const APP_VERSION = "2.2.0";
 const root = document.querySelector<HTMLDivElement>("#app")!;
@@ -28,6 +29,12 @@ function localStorageBackend(): globalThis.Storage | undefined {
 const backend = localStorageBackend();
 const storage = createStorage(backend);
 const uiPrefs = createUiPrefs(backend);
+applyReducedTransparency(uiPrefs.load().reducedTransparency);
+const liquidGlass = installLiquidGlass(document);
+window.addEventListener("pagehide", (event) => {
+  if (event.persisted) liquidGlass.cancelAll();
+  else liquidGlass.destroy();
+});
 let persistenceWarning = backend === undefined;
 
 function syncPersistenceWarning(): void {
@@ -58,6 +65,7 @@ function gotoHome(): void {
   retryPending();
   showHome(root, {
     storage,
+    uiPrefs,
     version: APP_VERSION,
     onContinue: gotoGame,
     onSelect: gotoMenu,

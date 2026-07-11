@@ -2,9 +2,14 @@ import { LEVELS, type LevelSpec } from "../core/levels";
 import type { GameStorage } from "../core/storage";
 import { setMuted } from "./audio";
 import { fmtTime } from "./format";
+import {
+  applyReducedTransparency,
+  type UiPrefsStore,
+} from "./ui-prefs";
 
 export interface HomeDeps {
   storage: GameStorage;
+  uiPrefs: UiPrefsStore;
   version: string;
   onContinue(level: LevelSpec): void;
   onSelect(): void;
@@ -77,6 +82,23 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
     stats.appendChild(streakStat);
   }
   stats.appendChild(soundBtn);
+  const transparencyBtn = document.createElement("button");
+  transparencyBtn.type = "button";
+  transparencyBtn.className = "transparency-btn";
+  let reduced = deps.uiPrefs.load().reducedTransparency;
+  const syncTransparency = (): void => {
+    transparencyBtn.textContent = reduced ? "◼ 实色" : "◫ 玻璃";
+    transparencyBtn.setAttribute("aria-label", "降低透明度");
+    transparencyBtn.setAttribute("aria-pressed", String(reduced));
+    applyReducedTransparency(reduced);
+  };
+  transparencyBtn.addEventListener("click", () => {
+    reduced = !reduced;
+    deps.uiPrefs.setReducedTransparency(reduced);
+    syncTransparency();
+  });
+  syncTransparency();
+  stats.appendChild(transparencyBtn);
 
   const barWrap = document.createElement("div");
   barWrap.className = "home-bar";

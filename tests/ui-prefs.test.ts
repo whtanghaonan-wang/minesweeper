@@ -1,6 +1,10 @@
 /** @vitest-environment jsdom */
 import { describe, expect, it } from "vitest";
-import { createUiPrefs, UI_PREFS_KEY } from "../src/ui/ui-prefs";
+import {
+  applyReducedTransparency,
+  createUiPrefs,
+  UI_PREFS_KEY,
+} from "../src/ui/ui-prefs";
 
 function backend(initial?: string) {
   const map = new Map<string, string>();
@@ -13,6 +17,13 @@ function backend(initial?: string) {
 }
 
 describe("ui-prefs", () => {
+  it("applyReducedTransparency 同步 html data 属性", () => {
+    applyReducedTransparency(true);
+    expect(document.documentElement.dataset["reducedTransparency"]).toBe("true");
+    applyReducedTransparency(false);
+    expect(document.documentElement.hasAttribute("data-reduced-transparency")).toBe(false);
+  });
+
   it("缺失/损坏回默认，两个偏好独立持久化", () => {
     expect(createUiPrefs(backend()).load()).toEqual({
       largeBoardHintSeen: false, reducedTransparency: false,
