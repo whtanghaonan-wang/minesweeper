@@ -9,6 +9,7 @@ export interface HomeDeps {
   onContinue(level: LevelSpec): void;
   onSelect(): void;
   onEndless(): void;
+  onPersisted?(persisted: boolean): void;
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -64,7 +65,8 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
   soundBtn.addEventListener("click", () => {
     on = !on;
     setMuted(!on);
-    deps.storage.setSoundOn(on);
+    const persisted = deps.storage.setSoundOn(on);
+    deps.onPersisted?.(persisted);
     syncSound();
   });
   stats.append(doneStat, bestStat);

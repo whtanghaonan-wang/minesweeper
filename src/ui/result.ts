@@ -55,10 +55,10 @@ export function showResult(opts: ResultOptions): void {
     modal.appendChild(badge);
   }
 
-  if (opts.won && !opts.persisted) {
+  if (!opts.persisted) {
     const warn = document.createElement("p");
     warn.className = "save-warn";
-    warn.textContent = "本次成绩未能保存";
+    warn.textContent = "进度暂未保存，将自动重试";
     modal.appendChild(warn);
   }
 

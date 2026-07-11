@@ -94,6 +94,25 @@ button:focus-visible {
   font-variant-numeric: tabular-nums;
 }
 
+.persistence-warning {
+  position: fixed;
+  z-index: 40;
+  top: max(0.75rem, env(safe-area-inset-top));
+  left: max(0.75rem, env(safe-area-inset-left));
+  right: max(0.75rem, env(safe-area-inset-right));
+  width: auto;
+  max-width: 28rem;
+  transform: none;
+  margin: 0 auto;
+  padding: 0.75rem 1rem;
+  border: 1px solid #8a5a24;
+  border-radius: 0.875rem;
+  color: var(--ink);
+  background: #fff4d6;
+  box-shadow: var(--shadow-soft);
+  pointer-events: none;
+}
+
 /* ===== 选关页 ===== */
 .menu {
   position: relative;

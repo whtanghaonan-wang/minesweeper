@@ -8,6 +8,7 @@ import { showGame } from "./ui/game";
 import { showResult } from "./ui/result";
 import { endlessSpec } from "./core/endless";
 import { mulberry32 } from "./core/rng";
+import { setPersistenceWarning } from "./ui/persistence-warning";
 
 const APP_VERSION = "2.2.0";
 const root = document.querySelector<HTMLDivElement>("#app")!;
@@ -25,19 +26,40 @@ function localStorageBackend(): globalThis.Storage | undefined {
 
 const backend = localStorageBackend();
 const storage = createStorage(backend);
+let persistenceWarning = backend === undefined;
+
+function syncPersistenceWarning(): void {
+  setPersistenceWarning(persistenceWarning);
+}
+
+function notePersisted(persisted: boolean): void {
+  persistenceWarning = !persisted;
+  syncPersistenceWarning();
+}
+
+function retryPending(): void {
+  const result = storage.flushPending();
+  if (result === "saved") persistenceWarning = false;
+  else if (result === "failed") persistenceWarning = true;
+  syncPersistenceWarning();
+}
+
 setMuted(!storage.load().soundOn);
 
 function gotoHome(): void {
+  retryPending();
   showHome(root, {
     storage,
     version: APP_VERSION,
     onContinue: gotoGame,
     onSelect: gotoMenu,
     onEndless: gotoEndless,
+    onPersisted: notePersisted,
   });
 }
 
 function gotoMenu(): void {
+  retryPending();
   showMenu(root, {
     storage,
     persistWarning: backend === undefined,
@@ -50,16 +72,17 @@ function gotoGame(level: LevelSpec): void {
   showGame(root, {
     level,
     onExit: gotoMenu,
-    onToggleSound: (on) => void storage.setSoundOn(on),
+    onToggleSound: (on) => notePersisted(storage.setSoundOn(on)),
     onFinish: (result) => {
       const next = LEVELS.find((l) => l.id === level.id + 1);
       const rec = result.won ? storage.recordWin(level.id, result.timeSec) : null;
+      if (rec !== null) notePersisted(rec.persisted);
       showResult({
         won: result.won,
         reason: result.reason,
         timeSec: result.timeSec,
         newBest: rec?.newBest ?? false,
-        persisted: rec?.persisted ?? true,
+        persisted: rec?.persisted ?? !persistenceWarning,
         hasNext: result.won && next !== undefined,
         onNext: () => next && gotoGame(next),
         onRetry: () => gotoGame(level),
@@ -76,15 +99,16 @@ function gotoEndless(): void {
     level,
     mode: { kind: "endless", streak },
     onExit: gotoHome, // 中途退出:本局不计、连胜保留(规格 §3.3)
-    onToggleSound: (on) => void storage.setSoundOn(on),
+    onToggleSound: (on) => notePersisted(storage.setSoundOn(on)),
     onFinish: (result) => {
       if (result.won) {
         const rec = storage.recordEndlessWin();
+        notePersisted(rec.persisted);
         showResult({
           won: true,
           timeSec: result.timeSec,
           newBest: rec.newBest,
-          persisted: true,
+          persisted: rec.persisted,
           hasNext: true,
           endless: { streak: rec.streak },
           onNext: gotoEndless,
@@ -93,13 +117,14 @@ function gotoEndless(): void {
         });
       } else {
         const ended = storage.load().endless.streak;
-        storage.recordEndlessLoss();
+        const rec = storage.recordEndlessLoss();
+        notePersisted(rec.persisted);
         showResult({
           won: false,
           reason: result.reason,
           timeSec: result.timeSec,
           newBest: false,
-          persisted: true,
+          persisted: rec.persisted,
           hasNext: false,
           endless: { streak: ended },
           onNext: gotoEndless,
@@ -111,6 +136,10 @@ function gotoEndless(): void {
   });
 }
 
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") retryPending();
+});
+syncPersistenceWarning();
 gotoHome();
 
 // PWA:仅在 Web 环境(https 或本地预览)注册 Service Worker;Tauri 桌面端不需要

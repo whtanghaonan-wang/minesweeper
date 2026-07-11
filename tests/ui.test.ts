@@ -463,6 +463,24 @@ describe("结算弹窗", () => {
     expect(overlay.textContent).not.toContain("下一关");
   });
 
+  it("失败局保存失败时显示统一的自动重试提示", () => {
+    showResult({
+      won: false,
+      reason: "mine",
+      timeSec: 12,
+      newBest: false,
+      persisted: false,
+      hasNext: false,
+      onNext: () => {},
+      onRetry: () => {},
+      onMenu: () => {},
+    });
+
+    expect(document.querySelector(".save-warn")!.textContent).toBe(
+      "进度暂未保存，将自动重试",
+    );
+  });
+
   it("无尽·胜:连胜标题、下一盘、最长连胜新纪录徽章、回首页", () => {
     let next = 0;
     let menu = 0;

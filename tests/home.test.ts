@@ -104,6 +104,21 @@ describe("首页", () => {
     expect(storage.load().soundOn).toBe(true);
   });
 
+  it("音效写入失败时把真实持久化状态回传给应用壳", () => {
+    const storage = createStorage({
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("storage unavailable");
+      },
+    });
+    const onPersisted = vi.fn();
+    show(storage, { onPersisted });
+
+    root.querySelector<HTMLButtonElement>(".sound-btn")!.click();
+
+    expect(onPersisted).toHaveBeenCalledWith(false);
+  });
+
   it("存档静音时初始即 🔇;装饰藤蔓存在", () => {
     const storage = createStorage(memBackend());
     storage.setSoundOn(false);
