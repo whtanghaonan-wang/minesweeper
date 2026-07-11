@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 const css = readFileSync("src/ui/style.css", "utf8");
+const liquidGlassCss = readFileSync("src/ui/liquid-glass.css", "utf8");
 
 function cssVar(name: string): string {
   const match = css.match(new RegExp(`${name}\\s*:\\s*(#[0-9a-fA-F]{6})`));
@@ -27,10 +28,27 @@ function contrast(a: string, b: string): number {
 }
 
 function declarations(selector: string): string {
+  return declarationsFrom(css, selector);
+}
+
+function declarationsFrom(source: string, selector: string): string {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = css.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`));
+  const match = source.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`));
   if (!match) throw new Error(`missing CSS selector ${selector}`);
   return match[1]!;
+}
+
+function declarationsWithPropertyFrom(
+  source: string,
+  selector: string,
+  propertyName: string,
+): string {
+  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const matches = [...source.matchAll(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`, "g"))];
+  const propertyPattern = new RegExp(`(?:^|;)\\s*${propertyName}\\s*:`);
+  const block = matches.map((match) => match[1]!).find((candidate) => propertyPattern.test(candidate));
+  if (!block) throw new Error(`missing CSS property ${propertyName} on ${selector}`);
+  return block;
 }
 
 function property(block: string, name: string): string {
@@ -68,6 +86,31 @@ function cssContrast(foreground: string, background: string): number {
   const [a, b] = [rgbLuminance(cssRgb(foreground)), rgbLuminance(cssRgb(background))]
     .sort((x, y) => y - x);
   return (a! + 0.05) / (b! + 0.05);
+}
+
+function multiplyComposite(
+  backdrop: [number, number, number],
+  source: [number, number, number],
+  alpha: number,
+): [number, number, number] {
+  return backdrop.map((channel, index) => Math.round(
+    channel * (1 - alpha) + channel * source[index]! / 255 * alpha,
+  )) as [number, number, number];
+}
+
+function rgba(value: string): { rgb: [number, number, number]; alpha: number } {
+  const match = value.match(
+    /^rgba\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*,\s*([\d.]+)\s*\)$/i,
+  );
+  if (!match) throw new Error(`unsupported rgba color ${value}`);
+  return {
+    rgb: [Number(match[1]), Number(match[2]), Number(match[3])],
+    alpha: Number(match[4]),
+  };
+}
+
+function hex(value: [number, number, number]): string {
+  return `#${value.map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
 }
 
 describe("v2.3 可访问颜色", () => {
@@ -111,14 +154,74 @@ describe("v2.3 可访问颜色", () => {
     }
   });
 
-  it("首页主按钮实际梯度的两端均可承载白字", () => {
-    const block = declarations(".home-play");
+  it("Liquid Glass 深色材质的实际梯度两端均可承载白字", () => {
+    const block = declarationsFrom(liquidGlassCss, "[data-liquid-glass].glass-tinted");
     const foreground = property(block, "color");
-    const stops = property(block, "background")
-      .match(/rgba?\([^)]+\)|#[0-9a-f]{3,6}/gi) ?? [];
-    expect(stops).toHaveLength(2);
-    for (const stop of stops) {
-      expect(cssContrast(foreground, stop), stop).toBeGreaterThanOrEqual(4.5);
+    const variables = property(block, "background")
+      .match(/--glass-tinted-(?:start|end)/g) ?? [];
+    expect(variables).toEqual(["--glass-tinted-start", "--glass-tinted-end"]);
+    const root = declarationsFrom(liquidGlassCss, ":root");
+    for (const variable of variables) {
+      const stop = property(root, variable);
+      for (const canvas of ["#ffffff", "#f2efe9"]) {
+        const composited = cssRgb(stop, rgb(canvas));
+        const background = `#${composited
+          .map((channel) => channel.toString(16).padStart(2, "0")).join("")}`;
+        expect(cssContrast(foreground, background), `${variable} on ${canvas}`)
+          .toBeGreaterThanOrEqual(4.5);
+      }
+    }
+  });
+
+  it("Liquid Glass 深色材质的实际棱镜与白色高光合成后仍可承载白字", () => {
+    const root = declarationsFrom(liquidGlassCss, ":root");
+    const tinted = declarationsFrom(liquidGlassCss, "[data-liquid-glass].glass-tinted");
+    const foreground = property(tinted, "color");
+    const tintVariables = property(tinted, "background")
+      .match(/--glass-tinted-(?:start|end)/g) ?? [];
+    const before = declarationsWithPropertyFrom(
+      liquidGlassCss, "[data-liquid-glass]::before", "background",
+    );
+    const after = declarationsWithPropertyFrom(
+      liquidGlassCss, "[data-liquid-glass]::after", "background",
+    );
+    const tintedBefore = declarationsFrom(
+      liquidGlassCss, "[data-liquid-glass].glass-tinted::before",
+    );
+    const tintedAfter = declarationsFrom(
+      liquidGlassCss, "[data-liquid-glass].glass-tinted::after",
+    );
+    const prismVariables = property(before, "background").match(/--glass-prism-[a-c]/g) ?? [];
+    const highlightColors = property(after, "background").match(/rgba\([^)]*\)/g) ?? [];
+    const layers = [
+      ...prismVariables.map((variable) => ({
+        ...rgba(property(root, variable)),
+        pseudoOpacity: Number(property(before, "opacity")),
+      })),
+      ...highlightColors.map((color) => ({
+        ...rgba(color),
+        pseudoOpacity: Number(property(after, "opacity")),
+      })),
+    ];
+
+    expect(property(tintedBefore, "mix-blend-mode")).toBe("multiply");
+    expect(property(tintedAfter, "mix-blend-mode")).toBe("multiply");
+    expect(prismVariables).toEqual(["--glass-prism-a", "--glass-prism-b", "--glass-prism-c"]);
+    expect(highlightColors).toEqual(["rgba(255,255,255,.92)", "rgba(255,255,255,.38)"]);
+
+    for (const tintVariable of tintVariables) {
+      const tint = property(root, tintVariable);
+      for (const canvas of ["#ffffff", "#f2efe9"]) {
+        const backdrop = cssRgb(tint, rgb(canvas));
+        for (const layer of layers) {
+          const composited = multiplyComposite(
+            backdrop, layer.rgb, layer.alpha * layer.pseudoOpacity,
+          );
+          expect(composited.every((channel, index) => channel <= backdrop[index]!)).toBe(true);
+          expect(cssContrast(foreground, hex(composited)), `${tintVariable} + ${layer.rgb}`)
+            .toBeGreaterThanOrEqual(4.5);
+        }
+      }
     }
   });
 

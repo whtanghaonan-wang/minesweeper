@@ -70,6 +70,15 @@ afterEach(() => {
 });
 
 describe("选关页", () => {
+  it("菜单返回按钮是独立光学表面", () => {
+    showMenu(root, {
+      storage: createStorage(memBackend()), onPlay: () => {}, onBack: () => {},
+    });
+    const back = root.querySelector(".menu-back")!;
+    expect(back.hasAttribute("data-liquid-glass")).toBe(true);
+    expect(back.hasAttribute("data-jelly")).toBe(true);
+  });
+
   it("菜单 roving 聚焦当前关，方向/Home/End 跳过锁定节点", () => {
     const storage = createStorage(memBackend());
     storage.recordWin(1, 10);
@@ -199,6 +208,21 @@ describe("游戏页", () => {
     });
     return root.querySelectorAll<HTMLButtonElement>(".cell");
   }
+
+  it("游戏只有 top/bottom 两层 surface，内部按钮只 jelly，棋盘不玻璃化", () => {
+    start();
+    const surfaces = root.querySelectorAll(".game-top[data-liquid-glass], " +
+      ".bottom-actions[data-liquid-glass]");
+    expect(surfaces).toHaveLength(2);
+    expect([...surfaces].every((surface) => surface.classList.contains("glass-compact")))
+      .toBe(true);
+    for (const button of root.querySelectorAll(".game-top button, .bottom-actions button")) {
+      expect(button.hasAttribute("data-jelly")).toBe(true);
+      expect(button.hasAttribute("data-liquid-glass")).toBe(false);
+    }
+    expect(root.querySelector(".board [data-liquid-glass], .board[data-liquid-glass], " +
+      ".cell[data-jelly]")).toBeNull();
+  });
 
   it("首次点击生成盘面并揭开", () => {
     const cells = start();
@@ -493,6 +517,21 @@ describe("游戏页", () => {
 });
 
 describe("结算弹窗", () => {
+  it("结果面板是唯一 surface，操作按钮只 jelly", () => {
+    showResult({
+      won: false, reason: "mine", timeSec: 1, newBest: false, persisted: true,
+      hasNext: false, backgroundRoot: root, onNext: () => {}, onRetry: () => {},
+      onMenu: () => {},
+    });
+    const modal = document.querySelector(".modal[data-liquid-glass]")!;
+    expect(modal.classList.contains("glass-clear")).toBe(true);
+    expect(modal.querySelector("[data-liquid-glass]")).toBeNull();
+    for (const button of modal.querySelectorAll("button")) {
+      expect(button.hasAttribute("data-jelly")).toBe(true);
+      expect(button.hasAttribute("data-liquid-glass")).toBe(false);
+    }
+  });
+
   it("通关显示用时/新纪录/下一关，点击后关闭并回调", () => {
     let next = 0;
     showResult({

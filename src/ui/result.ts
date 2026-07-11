@@ -26,7 +26,8 @@ export function showResult(opts: ResultOptions): void {
   overlay.className = "overlay";
 
   const modal = document.createElement("div");
-  modal.className = "modal";
+  modal.className = "modal glass-clear";
+  modal.dataset["liquidGlass"] = "";
   modal.setAttribute("role", "dialog");
   modal.setAttribute("aria-modal", "true");
 
@@ -140,6 +141,7 @@ function btn(cls: string, label: string, onClick: () => void): HTMLButtonElement
   const b = document.createElement("button");
   b.type = "button";
   b.className = cls;
+  b.dataset["jelly"] = "";
   b.textContent = label;
   b.addEventListener("click", onClick);
   return b;

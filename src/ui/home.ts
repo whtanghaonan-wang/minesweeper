@@ -2,6 +2,7 @@ import { LEVELS, type LevelSpec } from "../core/levels";
 import type { GameStorage } from "../core/storage";
 import { setMuted } from "./audio";
 import { fmtTime } from "./format";
+import { markStandaloneGlass } from "./liquid-glass";
 import {
   applyReducedTransparency,
   type UiPrefsStore,
@@ -62,9 +63,10 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
   const soundBtn = document.createElement("button");
   soundBtn.type = "button";
   soundBtn.className = "sound-btn";
+  const soundContent = markStandaloneGlass(soundBtn);
   let on = save.soundOn;
   const syncSound = (): void => {
-    soundBtn.textContent = on ? "🔊" : "🔇";
+    soundContent.textContent = on ? "🔊" : "🔇";
     soundBtn.setAttribute("aria-label", on ? "关闭音效" : "开启音效");
   };
   syncSound();
@@ -85,9 +87,10 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
   const transparencyBtn = document.createElement("button");
   transparencyBtn.type = "button";
   transparencyBtn.className = "transparency-btn";
+  const transparencyContent = markStandaloneGlass(transparencyBtn);
   let reduced = deps.uiPrefs.load().reducedTransparency;
   const syncTransparency = (): void => {
-    transparencyBtn.textContent = reduced ? "◼ 实色" : "◫ 玻璃";
+    transparencyContent.textContent = reduced ? "◼ 实色" : "◫ 玻璃";
     transparencyBtn.setAttribute("aria-label", "降低透明度");
     transparencyBtn.setAttribute("aria-pressed", String(reduced));
     applyReducedTransparency(reduced);
@@ -112,12 +115,14 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
   const playBtn = document.createElement("button");
   playBtn.type = "button";
   playBtn.className = "home-play";
-  playBtn.textContent = `▶ ${primaryLabel}`;
+  const playContent = markStandaloneGlass(playBtn, true);
+  playContent.textContent = `▶ ${primaryLabel}`;
   playBtn.addEventListener("click", () => deps.onContinue(target));
   const selBtn = document.createElement("button");
   selBtn.type = "button";
   selBtn.className = "home-select";
   selBtn.textContent = "🌿 选关";
+  markStandaloneGlass(selBtn);
   selBtn.addEventListener("click", () => deps.onSelect());
   const endlessBtn = document.createElement("button");
   endlessBtn.type = "button";
@@ -130,6 +135,7 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
     endlessBtn.classList.add("locked");
     endlessBtn.innerHTML = `♾ 无尽<span class="he-sub">🔒 通关 50 关解锁</span>`;
   }
+  markStandaloneGlass(endlessBtn);
   actions.append(playBtn, selBtn, endlessBtn);
 
   const ver = document.createElement("p");

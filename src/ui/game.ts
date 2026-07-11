@@ -99,7 +99,8 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   game.className = "game";
 
   const top = document.createElement("header");
-  top.className = "game-top";
+  top.className = "game-top glass-compact";
+  top.dataset["liquidGlass"] = "";
   const backBtn = button("pill back", "←", exit);
   backBtn.setAttribute("aria-label", "返回选关");
   const title = document.createElement("div");
@@ -140,7 +141,8 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   const bottom = document.createElement("footer");
   bottom.className = "game-bottom";
   const bottomActions = document.createElement("div");
-  bottomActions.className = "bottom-actions";
+  bottomActions.className = "bottom-actions glass-compact";
+  bottomActions.dataset["liquidGlass"] = "";
   const modeToggle = document.createElement("div");
   modeToggle.className = "mode-toggle";
   modeToggle.setAttribute("role", "group");
@@ -748,6 +750,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = cls;
+    btn.dataset["jelly"] = "";
     btn.textContent = label;
     btn.addEventListener("click", onClick);
     return btn;

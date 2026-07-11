@@ -1,0 +1,197 @@
+:root {
+  --glass-blur: 28px;
+  --glass-saturate: 210%;
+  --glass-tint: rgba(255, 255, 255, 0.38);
+  --glass-tint-strong: rgba(238, 248, 239, 0.50);
+  --glass-edge: rgba(255, 255, 255, 0.82);
+  --glass-boundary: rgba(42, 57, 45, 0.60);
+  --glass-shadow: rgba(42, 57, 45, 0.20);
+  --glass-tinted-start: rgba(65, 113, 76, 0.92);
+  --glass-tinted-end: rgba(49, 92, 62, 0.80);
+  --glass-prism-a: rgba(115, 226, 196, 0.30);
+  --glass-prism-b: rgba(154, 164, 255, 0.25);
+  --glass-prism-c: rgba(255, 171, 210, 0.22);
+}
+
+[data-liquid-glass] {
+  --glass-x: 50%;
+  --glass-y: 30%;
+  --glass-dx: 0;
+  --glass-dy: 0;
+  --glass-elevation:
+    0 0 0 1px var(--glass-boundary),
+    inset 0 1px 0 rgba(255,255,255,.96),
+    inset 0 -1px 1px rgba(255,255,255,.24),
+    0 10px 28px var(--glass-shadow);
+  position: relative;
+  isolation: isolate;
+  border-radius: var(--glass-radius, 999px);
+  background: linear-gradient(135deg, rgba(255,255,255,.56), var(--glass-tint));
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-elevation);
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+}
+
+[data-liquid-glass]::before,
+[data-liquid-glass]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  z-index: 0;
+  pointer-events: none;
+}
+
+[data-liquid-glass]::before {
+  background:
+    radial-gradient(circle at calc(var(--glass-x) - 18%) calc(var(--glass-y) + 12%),
+      var(--glass-prism-a), transparent 29%),
+    radial-gradient(circle at calc(var(--glass-x) + 20%) calc(var(--glass-y) - 8%),
+      var(--glass-prism-b), transparent 27%),
+    radial-gradient(circle at calc(var(--glass-x) + 4%) calc(var(--glass-y) + 22%),
+      var(--glass-prism-c), transparent 25%);
+  opacity: .72;
+}
+
+[data-liquid-glass]::after {
+  background: radial-gradient(circle at var(--glass-x) var(--glass-y),
+    rgba(255,255,255,.92) 0, rgba(255,255,255,.38) 12%, transparent 34%);
+  opacity: .76;
+}
+
+[data-liquid-glass] > *,
+.glass-content {
+  position: relative;
+  z-index: 1;
+}
+
+[data-liquid-glass].glass-tinted {
+  background: linear-gradient(135deg, var(--glass-tinted-start), var(--glass-tinted-end));
+  color: #fff;
+}
+
+[data-liquid-glass].glass-tinted::before {
+  mix-blend-mode: multiply;
+}
+
+[data-liquid-glass].glass-tinted::after {
+  mix-blend-mode: multiply;
+}
+
+[data-liquid-glass].glass-tinted:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--focus), var(--glass-elevation);
+}
+
+[data-liquid-glass].glass-clear {
+  background: linear-gradient(135deg, rgba(255,255,255,.56), var(--glass-tint));
+}
+
+[data-liquid-glass].glass-compact {
+  --glass-blur: 22px;
+  --glass-elevation:
+    0 0 0 1px var(--glass-boundary),
+    inset 0 1px 0 rgba(255,255,255,.96),
+    inset 0 -1px 1px rgba(255,255,255,.24),
+    0 6px 20px var(--glass-shadow);
+  background: linear-gradient(135deg, rgba(255,255,255,.68), var(--glass-tint-strong));
+  box-shadow: var(--glass-elevation);
+}
+
+.game-top[data-liquid-glass],
+.bottom-actions[data-liquid-glass],
+.modal[data-liquid-glass],
+.pwa-update-prompt[data-liquid-glass] {
+  --glass-radius: 1.5rem;
+}
+
+[data-jelly] {
+  transform-origin: center;
+  transition: transform 70ms ease-out, filter 70ms ease-out;
+}
+
+[data-jelly].is-glass-pressed {
+  transform:
+    translate(calc(var(--glass-dx) * 2px), calc(var(--glass-dy) * 2px))
+    rotateX(calc(var(--glass-dy) * -1.2deg))
+    rotateY(calc(var(--glass-dx) * 1.2deg))
+    scale(.96);
+  filter: brightness(1.04);
+}
+
+[data-jelly].is-glass-releasing {
+  animation: glass-release 420ms cubic-bezier(.2,.9,.25,1) both;
+}
+
+@keyframes glass-release {
+  0% { transform: scale(.96); }
+  46% { transform: scale(1.042); }
+  72% { transform: scale(.992); }
+  100% { transform: scale(1); }
+}
+
+html[data-reduced-transparency] [data-liquid-glass] {
+  background: rgba(247,248,244,.96);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-reduced-transparency] [data-liquid-glass].glass-tinted {
+  background: #315c3e;
+  color: #fff;
+}
+html[data-reduced-transparency] [data-liquid-glass]::before,
+html[data-reduced-transparency] [data-liquid-glass]::after { display: none; }
+
+@media (prefers-contrast: more) {
+  [data-liquid-glass] {
+    background: rgba(247,248,244,.96);
+    border-color: currentColor;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  [data-liquid-glass].glass-clear,
+  [data-liquid-glass].glass-compact { background: rgba(247,248,244,.96); }
+  [data-liquid-glass].glass-tinted { background: #315c3e; color: #fff; }
+  [data-liquid-glass]::before, [data-liquid-glass]::after { display: none; }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  [data-liquid-glass] {
+    background: rgba(247,248,244,.96);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  [data-liquid-glass].glass-clear,
+  [data-liquid-glass].glass-compact { background: rgba(247,248,244,.96); }
+  [data-liquid-glass].glass-tinted { background: #315c3e; color: #fff; }
+  [data-liquid-glass]::before, [data-liquid-glass]::after { display: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-jelly] { transition-duration: 100ms; }
+  [data-jelly].is-glass-pressed { transform: none; }
+  [data-jelly].is-glass-releasing { animation: none; }
+}
+
+@media (forced-colors: active) {
+  [data-liquid-glass] {
+    background: Canvas;
+    color: CanvasText;
+    border: 1px solid CanvasText;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+  [data-liquid-glass].glass-clear,
+  [data-liquid-glass].glass-compact { background: Canvas; color: CanvasText; }
+  [data-liquid-glass].glass-tinted { background: Canvas; color: CanvasText; }
+  [data-liquid-glass]::before, [data-liquid-glass]::after { display: none; }
+}
+
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  [data-liquid-glass] { background: rgba(247,248,244,.92); }
+  [data-liquid-glass].glass-clear,
+  [data-liquid-glass].glass-compact { background: rgba(247,248,244,.92); }
+  [data-liquid-glass].glass-tinted { background: #315c3e; color: #fff; }
+}

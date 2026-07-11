@@ -1,6 +1,7 @@
 import { LEVELS, type LevelSpec } from "../core/levels";
 import type { GameStorage } from "../core/storage";
 import { fmtTime } from "./format";
+import { markStandaloneGlass } from "./liquid-glass";
 import { vineLayout, type VineLayout, type VineNode } from "./vine";
 
 export interface MenuDeps {
@@ -27,6 +28,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps): void {
   back.type = "button";
   back.className = "pill back menu-back";
   back.textContent = "←";
+  markStandaloneGlass(back);
   back.setAttribute("aria-label", "返回首页");
   back.addEventListener("click", () => deps.onBack());
   menu.appendChild(back);

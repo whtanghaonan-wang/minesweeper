@@ -44,6 +44,23 @@ function show(storage = createStorage(memBackend()), over: Partial<Parameters<ty
 }
 
 describe("首页", () => {
+  it("首页每个独立操作都是单层 glass + jelly，且有内容层", () => {
+    show();
+    for (const selector of [".home-play", ".home-select", ".home-endless",
+      ".sound-btn", ".transparency-btn"]) {
+      const button = root.querySelector<HTMLButtonElement>(selector)!;
+      expect(button.hasAttribute("data-liquid-glass"), selector).toBe(true);
+      expect(button.hasAttribute("data-jelly"), selector).toBe(true);
+      expect(button.querySelector(":scope > .glass-content"), selector).not.toBeNull();
+      expect(button.matches(".glass-clear, .glass-tinted"), selector).toBe(true);
+    }
+    expect(root.querySelector(".home-play")!.classList.contains("glass-tinted")).toBe(true);
+    for (const selector of [".home-select", ".home-endless", ".sound-btn",
+      ".transparency-btn"]) {
+      expect(root.querySelector(selector)!.classList.contains("glass-clear"), selector).toBe(true);
+    }
+  });
+
   it("降低透明度按钮同步 aria-pressed、DOM 与独立偏好", () => {
     const uiPrefs = createUiPrefs(memBackend());
     show(createStorage(memBackend()), { uiPrefs });
