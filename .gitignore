@@ -8,3 +8,6 @@ src-tauri/target/
 /uninstall.exe
 gen-stats.tmp.txt
 gen-bench.tmp.txt
+/test-results/
+/playwright-report/
+/blob-report/

@@ -8,9 +8,12 @@
     "build:web": "tsc --noEmit && vite build --base=/minesweeper/",
     "build:desktop": "tsc --noEmit && vite build --base=./",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:e2e": "playwright test"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.12.1",
+    "@playwright/test": "^1.61.1",
     "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^26.1.0",
     "jsdom": "^29.1.1",

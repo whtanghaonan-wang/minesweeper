@@ -2,30 +2,31 @@
 :root {
   --bg: #f2efe9;
   --card: #ffffff;
-  --ink: #4a453e;
-  --ink-soft: #8b8377;
-  --easy: #8fae8b;
-  --challenge: #d9a86c;
-  --hard: #d98880;
-  --expert: #9b8fc4;
-  --abyss: #7a9cc4;
-  --inferno: #c4766a;
-  --umbra: #6ba3a0;
-  --void: #7a7fc4;
-  --chaos: #b87aa8;
-  --finale: #6e6a80;
+  --ink: #3f3a34;
+  --ink-soft: #686158;
+  --focus: #1f5c45;
+  --easy: #52724f;
+  --challenge: #8a5a24;
+  --hard: #9a433c;
+  --expert: #665595;
+  --abyss: #3e6590;
+  --inferno: #94483c;
+  --umbra: #36716d;
+  --void: #4f58a0;
+  --chaos: #8c4b78;
+  --finale: #565164;
 
   --cell: #e6e1d6;
   --cell-open: #faf8f4;
 
-  --n1: #7a9cc4;
-  --n2: #8fae8b;
-  --n3: #d98880;
-  --n4: #9b8fc4;
-  --n5: #c4917a;
-  --n6: #7ab8b0;
-  --n7: #b08fa8;
-  --n8: #8b8377;
+  --n1: #3e6590;
+  --n2: #52724f;
+  --n3: #9a433c;
+  --n4: #665595;
+  --n5: #854d33;
+  --n6: #36716d;
+  --n7: #7c466c;
+  --n8: #5d574f;
 
   --r-card: 1.25rem;
   --r-btn: 1rem;
@@ -85,8 +86,25 @@ button {
 }
 
 button:focus-visible {
-  outline: 2px solid var(--ink-soft);
+  outline: 3px solid var(--focus);
   outline-offset: 3px;
+}
+
+.btn.primary:focus-visible {
+  outline-color: #fff;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 6px var(--focus);
+}
+
+button:not(.cell) {
+  min-inline-size: 44px;
+  min-block-size: 44px;
+}
+
+button:disabled {
+  opacity: 1;
+  color: var(--ink-soft);
+  cursor: not-allowed;
 }
 
 .num {
@@ -191,7 +209,7 @@ button:focus-visible {
 }
 
 .tier-endless {
-  --tier-color: #5b8fa8;
+  --tier-color: #356b82;
 }
 
 /* ===== 藤蔓选关 ===== */
@@ -277,10 +295,9 @@ button:focus-visible {
 .vine-node.locked {
   background: transparent;
   border-style: dashed;
-  border-color: rgba(74, 69, 62, 0.25);
+  border-color: var(--ink-soft);
   box-shadow: none;
   cursor: default;
-  opacity: 0.6;
 }
 
 .vine-node.locked .vn-num {
@@ -433,7 +450,7 @@ button.pill:active {
 }
 
 .cell:focus-visible {
-  outline-width: 1.5px;
+  outline-width: 3px;
   outline-offset: 1px;
 }
 
@@ -658,7 +675,7 @@ button.pill:active {
 .best-badge {
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #9a7440;
+  color: #6f4b1f;
   background: rgba(217, 168, 108, 0.22);
   border-radius: 999px;
   padding: 0.25rem 0.8125rem;
@@ -855,7 +872,7 @@ button.pill:active {
 .home-play {
   flex: 1.7;
   padding: 0.8125rem 0;
-  background: linear-gradient(135deg, rgba(143, 174, 139, 0.88), rgba(143, 174, 139, 0.66));
+  background: linear-gradient(135deg, rgba(66, 101, 65, 0.98), rgba(49, 79, 48, 0.96));
   backdrop-filter: blur(18px) saturate(185%);
   -webkit-backdrop-filter: blur(18px) saturate(185%);
   border: 1px solid rgba(255, 255, 255, 0.45);
@@ -914,7 +931,8 @@ button.pill:active {
 }
 
 .home-endless.locked {
-  opacity: 0.55;
+  border-color: var(--ink-soft);
+  background: var(--cell-open);
   cursor: default;
 }
 
@@ -928,7 +946,35 @@ button.pill:active {
 .home-ver {
   text-align: center;
   font-size: 0.6875rem;
-  color: #b5ad9f;
+  color: var(--ink-soft);
+}
+
+@media (max-width: 420px), (max-height: 620px) {
+  .game-top {
+    flex-wrap: wrap;
+    align-content: flex-start;
+  }
+
+  .game-title {
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .game-stats,
+  .bottom-actions {
+    flex-wrap: wrap;
+  }
+}
+
+@media (forced-colors: active) {
+  button,
+  .cell,
+  .modal,
+  .game-top,
+  .game-bottom {
+    border: 1px solid CanvasText;
+    forced-color-adjust: auto;
+  }
 }
 
 /* ===== 液态玻璃回退(老浏览器) ===== */
