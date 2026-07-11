@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  BASE_CELL_PX,
+  centerBoardPoint,
   clampView,
   fitScale,
   maxScale,
@@ -7,6 +9,7 @@ import {
   type Metrics,
   createGestures,
   MOUSE_SLOP_PX,
+  scaleForMode,
   TOUCH_SLOP_PX,
   type GestureAction,
   hitCell,
@@ -225,5 +228,115 @@ describe("hitCell 几何吸附(v2.1 规格 §1.2)", () => {
   it("完全界外返回 null", () => {
     expect(hitCell(-50, 30, V, 8, 8)).toBeNull();
     expect(hitCell(30, 9999, V, 8, 8)).toBeNull();
+  });
+});
+
+describe("可操作视图模式", () => {
+  it("可操作模式保证 24px 格边，fit 模式仍完整容纳", () => {
+    const m: Metrics = { viewW: 320, viewH: 568, boardW: 1211, boardH: 1900 };
+    expect(scaleForMode("fit", m)).toBe(fitScale(m));
+    expect(BASE_CELL_PX * scaleForMode("operable", m)).toBeGreaterThanOrEqual(24);
+  });
+
+  it("fit 已达到 24px 格边时 operable 不额外放大，非法尺寸沿用回退", () => {
+    const alreadyOperable: Metrics = {
+      viewW: 800,
+      viewH: 800,
+      boardW: 1000,
+      boardH: 1000,
+    };
+    expect(fitScale(alreadyOperable)).toBe(0.8);
+    expect(scaleForMode("operable", alreadyOperable)).toBe(0.8);
+
+    const invalid: Metrics = { viewW: 0, viewH: 0, boardW: 0, boardH: 0 };
+    expect(scaleForMode("fit", invalid)).toBe(1);
+    expect(scaleForMode("operable", invalid)).toBe(1);
+  });
+
+  it("centerBoardPoint 把同一盘面点放回目标视口点", () => {
+    const m: Metrics = {
+      viewW: 320,
+      viewH: 568,
+      boardW: 1211,
+      boardH: 1900,
+      insetTop: 70,
+      insetBottom: 80,
+    };
+    const centered = centerBoardPoint({ scale: 0.6, tx: 0, ty: 0 }, m, 500, 700, 160, 279);
+    expect(centered.tx + 500 * centered.scale).toBeCloseTo(160);
+    expect(centered.ty + 700 * centered.scale).toBeCloseTo(279);
+  });
+
+  it("centerBoardPoint 的目标超界时钳制到允许边界", () => {
+    const m: Metrics = {
+      viewW: 320,
+      viewH: 568,
+      boardW: 600,
+      boardH: 900,
+      insetTop: 70,
+      insetBottom: 80,
+    };
+    const requested = { scale: 1, tx: 1000, ty: 1000 };
+    const centered = centerBoardPoint(
+      { scale: 1, tx: 0, ty: 0 },
+      m,
+      0,
+      0,
+      requested.tx,
+      requested.ty,
+    );
+    expect(centered).toEqual(clampView(requested, m));
+    expect(centered).toEqual({ scale: 1, tx: 0, ty: 70 });
+  });
+
+  const resetScenarios: Array<{
+    name: string;
+    prepare: (g: ReturnType<typeof createGestures>) => number[];
+  }> = [
+    {
+      name: "maybeTap",
+      prepare(g) {
+        g.handle({ type: "down", id: 1, x: 10, y: 10, touch: true, button: 0 });
+        return [1];
+      },
+    },
+    {
+      name: "pan",
+      prepare(g) {
+        g.handle({ type: "down", id: 2, x: 10, y: 10, touch: true, button: 0 });
+        g.handle({ type: "move", id: 2, x: 10 + TOUCH_SLOP_PX, y: 10 });
+        return [2];
+      },
+    },
+    {
+      name: "pinch",
+      prepare(g) {
+        g.handle({ type: "down", id: 3, x: 10, y: 10, touch: true, button: 0 });
+        g.handle({ type: "down", id: 4, x: 30, y: 10, touch: true, button: 0 });
+        return [3, 4];
+      },
+    },
+    {
+      name: "cooldown",
+      prepare(g) {
+        g.handle({ type: "down", id: 5, x: 10, y: 10, touch: false, button: 2 });
+        return [5];
+      },
+    },
+  ];
+
+  it.each(resetScenarios)("$name reset 后立即接受新 tap，迟到旧事件无害", ({ prepare }) => {
+    const g = createGestures();
+    const oldIds = prepare(g);
+    g.reset();
+
+    expect(g.handle({ type: "down", id: 99, x: 20, y: 20, touch: false, button: 0 })).toEqual([]);
+    expect(g.handle({ type: "up", id: 99, x: 20, y: 20 })).toEqual([
+      { type: "tap", alt: false, touch: false },
+    ]);
+    for (const id of oldIds) {
+      expect(g.handle({ type: "up", id, x: 10, y: 10 })).toEqual([]);
+    }
+    expect(g.handle({ type: "longpress" })).toEqual([]);
   });
 });

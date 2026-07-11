@@ -18,6 +18,8 @@ export interface Metrics {
 
 export const BASE_CELL_PX = 40;
 export const MAX_CELL_PX = 64;
+export type ViewMode = "fit" | "operable";
+export const OPERABLE_CELL_PX = 24;
 
 export const BOARD_PAD = 10;
 export const CELL_GAP = 3;
@@ -68,6 +70,11 @@ export function maxScale(m: Metrics): number {
   return Math.max(fitScale(m), MAX_CELL_PX / BASE_CELL_PX);
 }
 
+export function scaleForMode(mode: ViewMode, m: Metrics): number {
+  const fit = fitScale(m);
+  return mode === "fit" ? fit : Math.min(maxScale(m), Math.max(fit, OPERABLE_CELL_PX / BASE_CELL_PX));
+}
+
 /** 平移钳制：盘小于净空区的轴向在净空区内居中；大于净空区的轴向允许延伸到全屏边缘,
  *  但净空区内不许露底(v2.2 §4.2;无净空时与 v2.1 行为一致) */
 export function clampView(v: ViewState, m: Metrics): ViewState {
@@ -93,6 +100,21 @@ export function zoomAt(
   return clampView({ scale: s, tx: px - (px - v.tx) * k, ty: py - (py - v.ty) * k }, m);
 }
 
+export function centerBoardPoint(
+  view: ViewState,
+  metrics: Metrics,
+  boardX: number,
+  boardY: number,
+  viewportX: number,
+  viewportY: number,
+): ViewState {
+  return clampView({
+    scale: view.scale,
+    tx: viewportX - boardX * view.scale,
+    ty: viewportY - boardY * view.scale,
+  }, metrics);
+}
+
 // ===== 手势状态机（防误触，v2 设计文档 §2.2）=====
 
 export const MOUSE_SLOP_PX = 8;
@@ -112,10 +134,15 @@ export type GestureAction =
   | { type: "startTimer" }
   | { type: "cancelTimer" };
 
+export interface GestureController {
+  handle(e: GestureEvent): GestureAction[];
+  reset(): void;
+}
+
 type Pt = { x: number; y: number };
 type State = "idle" | "maybeTap" | "pan" | "pinch" | "cooldown";
 
-export function createGestures(): { handle(e: GestureEvent): GestureAction[] } {
+export function createGestures(): GestureController {
   let state: State = "idle";
   let touch = false;
   let primaryId = -1;
@@ -221,6 +248,14 @@ export function createGestures(): { handle(e: GestureEvent): GestureAction[] } {
         }
       }
       return out;
+    },
+    reset() {
+      state = "idle";
+      touch = false;
+      primaryId = -1;
+      held.clear();
+      pinchDist = 0;
+      pinchMid = { x: 0, y: 0 };
     },
   };
 }
