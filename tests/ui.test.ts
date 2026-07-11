@@ -70,6 +70,47 @@ afterEach(() => {
 });
 
 describe("选关页", () => {
+  it("菜单 roving 聚焦当前关，方向/Home/End 跳过锁定节点", () => {
+    const storage = createStorage(memBackend());
+    storage.recordWin(1, 10);
+    storage.recordWin(2, 20);
+    showMenu(root, { storage, onPlay: () => {}, onBack: () => {} });
+    const nodes = [...root.querySelectorAll<HTMLButtonElement>(".vine-node:not(:disabled)")];
+    const navigate = (
+      from: HTMLButtonElement,
+      key: "ArrowUp" | "ArrowDown" | "ArrowLeft" | "ArrowRight" | "Home" | "End",
+      expected: HTMLButtonElement,
+    ): void => {
+      const event = new KeyboardEvent("keydown", { key, bubbles: true, cancelable: true });
+      from.dispatchEvent(event);
+      expect(event.defaultPrevented).toBe(true);
+      expect(nodes.filter((node) => node.tabIndex === 0)).toEqual([expected]);
+      expect(document.activeElement).toBe(expected);
+    };
+
+    expect(nodes).toHaveLength(3);
+    expect(nodes.filter((node) => node.tabIndex === 0)).toHaveLength(1);
+    expect(document.activeElement).toBe(nodes[2]);
+
+    navigate(nodes[2]!, "ArrowLeft", nodes[1]!);
+    navigate(nodes[1]!, "ArrowUp", nodes[0]!);
+    navigate(nodes[0]!, "ArrowUp", nodes[0]!);
+    navigate(nodes[0]!, "ArrowLeft", nodes[0]!);
+    navigate(nodes[0]!, "ArrowRight", nodes[1]!);
+    navigate(nodes[1]!, "ArrowDown", nodes[2]!);
+    navigate(nodes[2]!, "ArrowDown", nodes[2]!);
+    navigate(nodes[2]!, "ArrowRight", nodes[2]!);
+    navigate(nodes[2]!, "Home", nodes[0]!);
+    navigate(nodes[0]!, "End", nodes[2]!);
+  });
+
+  it("50 关全通时默认聚焦 L50", () => {
+    const storage = createStorage(memBackend());
+    for (const level of LEVELS) storage.recordWin(level.id, 1);
+    showMenu(root, { storage, onPlay: () => {}, onBack: () => {} });
+    expect((document.activeElement as HTMLElement).getAttribute("aria-label")).toContain("第 50 关");
+  });
+
   it("渲染 50 个藤蔓节点，仅第 1 关可玩，其余锁定", () => {
     showMenu(root, { storage: createStorage(memBackend()), onPlay: () => {}, onBack: () => {} });
     const nodes = root.querySelectorAll<HTMLButtonElement>(".vine-node");

@@ -45,7 +45,7 @@ export function showMenu(root: HTMLElement, deps: MenuDeps): void {
   map.className = "vine-map";
   map.appendChild(buildSvg(layout));
 
-  let currentEl: HTMLElement | null = null;
+  let currentEl: HTMLButtonElement | null = null;
   for (let i = 0; i < LEVELS.length; i++) {
     const level = LEVELS[i]!;
     const btn = vineNode(level, layout.nodes[i]!, layout, save.unlockedLevel, save.bestTimes[level.id], deps);
@@ -53,10 +53,38 @@ export function showMenu(root: HTMLElement, deps: MenuDeps): void {
     map.appendChild(btn);
   }
 
+  const playable = [...map.querySelectorAll<HTMLButtonElement>(".vine-node:not(:disabled)")];
+  let activeIndex = currentEl === null
+    ? playable.length - 1
+    : Math.max(0, playable.indexOf(currentEl));
+  const syncTabStops = (): void => {
+    playable.forEach((node, index) => {
+      node.tabIndex = index === activeIndex ? 0 : -1;
+    });
+  };
+  const focusAt = (index: number): void => {
+    activeIndex = Math.max(0, Math.min(playable.length - 1, index));
+    syncTabStops();
+    playable[activeIndex]?.focus();
+    playable[activeIndex]?.scrollIntoView?.({ block: "center" });
+  };
+  syncTabStops();
+  map.addEventListener("keydown", (event) => {
+    if (!(event.target instanceof HTMLButtonElement) || !event.target.matches(".vine-node")) return;
+    const index = playable.indexOf(event.target);
+    const next = event.key === "ArrowUp" || event.key === "ArrowLeft" ? index - 1
+      : event.key === "ArrowDown" || event.key === "ArrowRight" ? index + 1
+        : event.key === "Home" ? 0
+          : event.key === "End" ? playable.length - 1
+            : null;
+    if (next === null) return;
+    event.preventDefault();
+    focusAt(next);
+  });
+
   menu.appendChild(map);
   root.replaceChildren(menu);
-  // 打开即定位到当前进度（jsdom 无 scrollIntoView 时静默跳过）
-  currentEl?.scrollIntoView?.({ block: "center" });
+  focusAt(activeIndex);
 }
 
 function buildSvg(layout: VineLayout): SVGSVGElement {

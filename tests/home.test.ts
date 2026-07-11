@@ -41,6 +41,13 @@ function show(storage = createStorage(memBackend()), over: Partial<Parameters<ty
 }
 
 describe("首页", () => {
+  it("首页挂载后主标题可程序聚焦", () => {
+    show();
+    const title = root.querySelector<HTMLHeadingElement>("h1")!;
+    expect(title.tabIndex).toBe(-1);
+    expect(document.activeElement).toBe(title);
+  });
+
   it("新档:开始游戏·第 1 关,进度 0/50,最快 —,版本号显示", () => {
     const t = show();
     expect(root.querySelector("h1")!.textContent).toBe("扫雷");

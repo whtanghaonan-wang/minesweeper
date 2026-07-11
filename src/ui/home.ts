@@ -39,6 +39,7 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
   hero.appendChild(buildVineDeco());
   const title = document.createElement("h1");
   title.textContent = "扫雷";
+  title.tabIndex = -1;
   const sub = document.createElement("p");
   sub.className = "home-sub";
   sub.textContent = "沿着藤蔓,一路向上";
@@ -116,6 +117,7 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
   panel.append(stats, barWrap, actions, ver);
   home.append(hero, panel);
   root.replaceChildren(home);
+  title.focus();
 }
 
 /** 装饰藤蔓:自顶垂落,CSS 驱动生长动画(prefers-reduced-motion 时静态) */
