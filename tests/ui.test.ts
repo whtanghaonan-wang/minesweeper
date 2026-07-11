@@ -403,6 +403,35 @@ describe("游戏页", () => {
     expect(root.querySelectorAll(".cell.open")).toHaveLength(0);
   });
 
+  it("旋转会释放全部 pointer capture，并保留当前 flag 与模式", () => {
+    start();
+    const viewport = root.querySelector<HTMLElement>(".board-viewport")!;
+    const captured = new Set<number>();
+    viewport.setPointerCapture = vi.fn((id) => { captured.add(id); });
+    viewport.hasPointerCapture = vi.fn((id) => captured.has(id));
+    viewport.releasePointerCapture = vi.fn((id) => { captured.delete(id); });
+    root.querySelector<HTMLButtonElement>('[data-logical-index="7"]')!
+      .dispatchEvent(new KeyboardEvent("keydown", { key: "f", bubbles: true }));
+    root.querySelector<HTMLButtonElement>(".mode-btn:last-child")!.click();
+    for (const id of [11, 12]) {
+      const down = new MouseEvent("pointerdown", {
+        bubbles: true, clientX: 40 + id, clientY: 120, button: 0,
+      });
+      Object.defineProperties(down, {
+        pointerId: { value: id }, pointerType: { value: "touch" },
+      });
+      viewport.dispatchEvent(down);
+    }
+    Object.defineProperty(window, "innerWidth", { value: 844, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 390, configurable: true });
+    window.dispatchEvent(new Event("resize"));
+    expect(captured).toEqual(new Set());
+    expect(viewport.releasePointerCapture).toHaveBeenCalledWith(11);
+    expect(viewport.releasePointerCapture).toHaveBeenCalledWith(12);
+    expect(root.querySelector('[data-logical-index="7"]')!.textContent).toBe("🚩");
+    expect(root.querySelector(".mode-btn:last-child")!.getAttribute("aria-pressed")).toBe("true");
+  });
+
   it("无尽模式:标题显示 ♾ 无尽与连胜徽章", () => {
     vi.useFakeTimers();
     Object.defineProperty(window, "innerWidth", { value: 400, configurable: true });

@@ -9,6 +9,7 @@ import { showResult } from "./ui/result";
 import { endlessSpec } from "./core/endless";
 import { mulberry32 } from "./core/rng";
 import { setPersistenceWarning } from "./ui/persistence-warning";
+import { createUiPrefs } from "./ui/ui-prefs";
 
 const APP_VERSION = "2.2.0";
 const root = document.querySelector<HTMLDivElement>("#app")!;
@@ -26,6 +27,7 @@ function localStorageBackend(): globalThis.Storage | undefined {
 
 const backend = localStorageBackend();
 const storage = createStorage(backend);
+const uiPrefs = createUiPrefs(backend);
 let persistenceWarning = backend === undefined;
 
 function syncPersistenceWarning(): void {
@@ -71,6 +73,7 @@ function gotoMenu(): void {
 function gotoGame(level: LevelSpec): void {
   showGame(root, {
     level,
+    uiPrefs,
     onExit: gotoMenu,
     onToggleSound: (on) => notePersisted(storage.setSoundOn(on)),
     onFinish: (result) => {
@@ -98,6 +101,7 @@ function gotoEndless(): void {
   showGame(root, {
     level,
     mode: { kind: "endless", streak },
+    uiPrefs,
     onExit: gotoHome, // 中途退出:本局不计、连胜保留(规格 §3.3)
     onToggleSound: (on) => notePersisted(storage.setSoundOn(on)),
     onFinish: (result) => {
