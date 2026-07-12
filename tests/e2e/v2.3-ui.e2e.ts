@@ -35,22 +35,25 @@ async function openLevel50(page: Page): Promise<void> {
 }
 
 async function finishLevelOneThroughUi(page: Page): Promise<ReturnType<Page["getByRole"]>> {
+  await page.addInitScript(() => {
+    // 固定生产盘面的随机种子，避免跨浏览器回归依赖某次随机盘的挖掘长度。
+    Math.random = () => 0;
+  });
   await page.goto("/");
   await page.getByRole("button", { name: /选关/ }).click();
   await page.getByRole("button", { name: /^第 1 关，/ }).click();
 
   const dialog = page.getByRole("dialog");
+  const finishedBoard = page.locator(".cell.boom, .cell.mine-shown, .cell.flagged");
   const cellCount = await page.getByRole("gridcell").count();
   for (let index = 0; index < cellCount; index++) {
     if (await dialog.isVisible()) return dialog;
     const cell = page.getByRole("gridcell").nth(index);
     await cell.focus();
     await cell.press("Enter");
-    try {
-      await dialog.waitFor({ state: "visible", timeout: 50 });
+    if (await finishedBoard.count() > 0) {
+      await expect(dialog).toBeVisible({ timeout: 5_000 });
       return dialog;
-    } catch {
-      // 继续按视觉顺序挖掘；真实胜负完成后，主流程会在暂停结束时展示结果。
     }
   }
   await expect(dialog).toBeVisible({ timeout: 5_000 });
@@ -187,4 +190,67 @@ test("首页、菜单和游戏无 serious/critical axe 问题", async ({ page })
   const dialogResult = await new AxeBuilder({ page }).include(".overlay").analyze();
   expect(dialogResult.violations.filter((v) => ["serious", "critical"].includes(v.impact ?? "")))
     .toEqual([]);
+});
+
+test("强玻璃有标准/WebKit blur，手动降低透明度即时实色", async ({ page }) => {
+  await page.goto("/");
+  const play = page.locator(".home-play");
+  const before = await play.evaluate((element) => ({
+    backdrop: getComputedStyle(element).backdropFilter,
+    webkit: getComputedStyle(element).getPropertyValue("-webkit-backdrop-filter"),
+    shadow: getComputedStyle(element).boxShadow,
+  }));
+  expect(`${before.backdrop} ${before.webkit}`.toLowerCase()).toContain("blur");
+  expect(before.shadow).toMatch(
+    /rgba?\(\s*42\s*,\s*57\s*,\s*45(?:\s*,|\s*\/\s*)\s*0\.6\s*\)/,
+  );
+
+  await page.locator(".transparency-btn").click();
+  await expect(page.locator("html")).toHaveAttribute("data-reduced-transparency", "true");
+  const after = await play.evaluate((element) => ({
+    backdrop: getComputedStyle(element).backdropFilter,
+    webkit: getComputedStyle(element).getPropertyValue("-webkit-backdrop-filter"),
+    color: getComputedStyle(element).color,
+    background: getComputedStyle(element).backgroundColor,
+    beforeDisplay: getComputedStyle(element, "::before").display,
+    afterDisplay: getComputedStyle(element, "::after").display,
+  }));
+  expect([after.backdrop, after.webkit].every((value) => value === "none" || value === ""))
+    .toBe(true);
+  expect(after.color).toBe("rgb(255, 255, 255)");
+  expect(after.background).toBe("rgb(49, 92, 62)");
+  expect(after.beforeDisplay).toBe("none");
+  expect(after.afterDisplay).toBe("none");
+});
+
+test("同一视觉簇没有嵌套光学表面，棋盘没有 glass/filter", async ({ page }) => {
+  await openLevel50(page);
+  expect(await page.locator("[data-liquid-glass] [data-liquid-glass]").count()).toBe(0);
+  expect(await page.locator(".board [data-liquid-glass], .cell[data-liquid-glass]").count()).toBe(0);
+  const filter = await page.locator(".cell").first().evaluate((element) => ({
+    filter: getComputedStyle(element).filter,
+    backdrop: getComputedStyle(element).backdropFilter,
+    webkit: getComputedStyle(element).getPropertyValue("-webkit-backdrop-filter"),
+  }));
+  expect(filter.filter).toBe("none");
+  expect([filter.backdrop, filter.webkit].every((value) => value === "none" || value === ""))
+    .toBe(true);
+});
+
+test("减少动态时没有弹性 transform 动画", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto("/");
+  const play = page.locator(".home-play");
+  await play.evaluate((element) => {
+    element.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+  });
+  await expect(play).toHaveClass(/is-glass-pressed/);
+  await play.evaluate((element) => {
+    element.dispatchEvent(new KeyboardEvent("keyup", { key: " ", bubbles: true }));
+  });
+  await page.evaluate(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
+  await expect(play).not.toHaveClass(/is-glass-pressed/);
+  await expect(play).not.toHaveClass(/is-glass-releasing/);
+  const transform = await play.evaluate((element) => getComputedStyle(element).transform);
+  expect(transform === "none" || transform === "matrix(1, 0, 0, 1, 0, 0)").toBe(true);
 });
