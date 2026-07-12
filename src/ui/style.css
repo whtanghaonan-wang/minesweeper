@@ -889,6 +889,28 @@ button:disabled {
   color: var(--ink-soft);
 }
 
+.pwa-update-prompt {
+  position: fixed;
+  z-index: 30;
+  left: 50%;
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  width: min(22rem, calc(100vw - 2rem));
+  border-radius: 1.25rem;
+  padding: 0.875rem 1rem;
+}
+
+.pwa-update-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.625rem;
+}
+
+.pwa-update-actions button {
+  min-height: 44px;
+  flex: 1;
+}
+
 @media (max-width: 420px), (max-height: 620px) {
   .game-top {
     flex-wrap: wrap;
