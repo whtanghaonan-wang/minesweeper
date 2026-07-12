@@ -100,6 +100,11 @@ try {
     $tauriArgs += "--no-sign"
   }
 
+  # 证书已入库、thumbprint 配置已落盘;构建工具链(npm 依赖树)不得再接触签名材料
+  $env:WINDOWS_CERTIFICATE = $null
+  $env:WINDOWS_CERTIFICATE_PASSWORD = $null
+  $env:WINDOWS_TIMESTAMP_URL = $null
+
   & npx @tauriArgs
   if ($LASTEXITCODE -ne 0) {
     throw "Tauri build failed with exit code $LASTEXITCODE"
@@ -203,7 +208,7 @@ try {
     $certificatePath = "Cert:\CurrentUser\My\$thumbprint"
     try {
       if (Test-Path -LiteralPath $certificatePath) {
-        Remove-Item -LiteralPath $certificatePath -Force -ErrorAction Stop
+        Remove-Item -LiteralPath $certificatePath -DeleteKey -Force -ErrorAction Stop
       }
     } catch {
       $cleanupErrors += "certificate ${thumbprint}: $($_.Exception.Message)"
