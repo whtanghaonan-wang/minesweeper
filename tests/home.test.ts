@@ -47,11 +47,41 @@ describe("首页", () => {
   it("首页触控条按统计/主操作/次操作/工具分组且版本号在玻璃外", () => {
     show();
     const panel = root.querySelector<HTMLElement>(".home-panel")!;
-    expect(panel.querySelector(":scope > .home-stats")).not.toBeNull();
-    expect(panel.querySelector(":scope > .home-bar")).not.toBeNull();
-    expect(panel.querySelector(":scope > .home-play")).not.toBeNull();
-    expect(panel.querySelector(":scope > .home-secondary-actions")).not.toBeNull();
-    expect(panel.querySelector(":scope > .home-tools")).not.toBeNull();
+    expect(Array.from(panel.children, (child) => child.classList[0])).toEqual([
+      "home-stats",
+      "home-bar",
+      "home-play",
+      "home-secondary-actions",
+      "home-tools",
+    ]);
+
+    const secondaryActions = panel.querySelector<HTMLElement>(":scope > .home-secondary-actions")!;
+    const tools = panel.querySelector<HTMLElement>(":scope > .home-tools")!;
+    const buttonKinds = (container: HTMLElement): string[] =>
+      Array.from(container.children, (child) =>
+        `${child.tagName.toLowerCase()}.${child.classList[0]}`,
+      );
+    expect(buttonKinds(secondaryActions)).toEqual([
+      "button.home-select",
+      "button.home-endless",
+    ]);
+    expect(buttonKinds(tools)).toEqual([
+      "button.sound-btn",
+      "button.transparency-btn",
+    ]);
+
+    for (const [selector, parent] of [
+      [".home-select", secondaryActions],
+      [".home-endless", secondaryActions],
+      [".sound-btn", tools],
+      [".transparency-btn", tools],
+    ] as const) {
+      expect(panel.querySelectorAll(selector), selector).toHaveLength(1);
+      expect(panel.querySelector(selector)?.parentElement, selector).toBe(parent);
+      expect(panel.querySelector(`:scope > ${selector}`), selector).toBeNull();
+    }
+    expect(secondaryActions.querySelector(".sound-btn, .transparency-btn")).toBeNull();
+    expect(tools.querySelector(".home-select, .home-endless")).toBeNull();
     expect(panel.querySelector(".home-ver")).toBeNull();
     expect(root.querySelector(".home > .home-ver")?.textContent).toBe("v9.9.9-test");
   });
