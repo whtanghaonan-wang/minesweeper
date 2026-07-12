@@ -83,7 +83,6 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
     streakStat.textContent = `♾ 最长连胜 ${save.endless.bestStreak}`;
     stats.appendChild(streakStat);
   }
-  stats.appendChild(soundBtn);
   const transparencyBtn = document.createElement("button");
   transparencyBtn.type = "button";
   transparencyBtn.className = "transparency-btn";
@@ -101,7 +100,9 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
     syncTransparency();
   });
   syncTransparency();
-  stats.appendChild(transparencyBtn);
+  const tools = document.createElement("div");
+  tools.className = "home-tools";
+  tools.append(soundBtn, transparencyBtn);
 
   const barWrap = document.createElement("div");
   barWrap.className = "home-bar";
@@ -110,8 +111,6 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
   fill.style.width = `${(done / MAX) * 100}%`;
   barWrap.appendChild(fill);
 
-  const actions = document.createElement("div");
-  actions.className = "home-actions";
   const playBtn = document.createElement("button");
   playBtn.type = "button";
   playBtn.className = "home-play";
@@ -136,14 +135,16 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
     endlessBtn.classList.add("locked");
     endlessBtn.innerHTML = `♾ 无尽<span class="he-sub">🔒 通关 50 关解锁</span>`;
   }
-  actions.append(playBtn, selBtn, endlessBtn);
+  const secondaryActions = document.createElement("div");
+  secondaryActions.className = "home-secondary-actions";
+  secondaryActions.append(selBtn, endlessBtn);
 
   const ver = document.createElement("p");
   ver.className = "home-ver num";
   ver.textContent = `v${deps.version}`;
 
-  panel.append(stats, barWrap, actions, ver);
-  home.append(hero, panel);
+  panel.append(stats, barWrap, playBtn, secondaryActions, tools);
+  home.append(hero, panel, ver);
   root.replaceChildren(home);
   title.focus();
 }

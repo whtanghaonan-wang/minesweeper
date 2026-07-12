@@ -44,6 +44,18 @@ function show(storage = createStorage(memBackend()), over: Partial<Parameters<ty
 }
 
 describe("首页", () => {
+  it("首页触控条按统计/主操作/次操作/工具分组且版本号在玻璃外", () => {
+    show();
+    const panel = root.querySelector<HTMLElement>(".home-panel")!;
+    expect(panel.querySelector(":scope > .home-stats")).not.toBeNull();
+    expect(panel.querySelector(":scope > .home-bar")).not.toBeNull();
+    expect(panel.querySelector(":scope > .home-play")).not.toBeNull();
+    expect(panel.querySelector(":scope > .home-secondary-actions")).not.toBeNull();
+    expect(panel.querySelector(":scope > .home-tools")).not.toBeNull();
+    expect(panel.querySelector(".home-ver")).toBeNull();
+    expect(root.querySelector(".home > .home-ver")?.textContent).toBe("v9.9.9-test");
+  });
+
   it("首页底部面板是唯一玻璃面,内部按钮只 jelly 不嵌套光学表面", () => {
     show();
     const panel = root.querySelector<HTMLElement>(".home-panel")!;
