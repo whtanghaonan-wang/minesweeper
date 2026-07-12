@@ -11,8 +11,8 @@ import { mulberry32 } from "./core/rng";
 import { setPersistenceWarning } from "./ui/persistence-warning";
 import { applyReducedTransparency, createUiPrefs } from "./ui/ui-prefs";
 import { installLiquidGlass } from "./ui/liquid-glass";
+import { APP_VERSION } from "./version";
 
-const APP_VERSION = "2.2.0";
 const root = document.querySelector<HTMLDivElement>("#app")!;
 
 function localStorageBackend(): globalThis.Storage | undefined {

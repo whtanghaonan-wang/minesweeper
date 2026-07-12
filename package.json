@@ -1,7 +1,11 @@
 {
   "name": "minesweeper",
   "private": true,
-  "version": "2.2.0",
+  "version": "2.3.0",
+  "description": "A no-guess Minesweeper game with 50 levels and endless mode",
+  "author": "whtanghaonan-wang",
+  "repository": "https://github.com/whtanghaonan-wang/minesweeper",
+  "license": "UNLICENSED",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -9,7 +13,10 @@
     "build:desktop": "tsc --noEmit && vite build --base=./",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "version:sync": "node scripts/version.mjs sync",
+    "version:check": "node scripts/version.mjs check",
+    "version:check:tag": "node scripts/version.mjs check --tag"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",
