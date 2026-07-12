@@ -24,6 +24,11 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npx playwright install --with-deps chromium webkit
+      - run: npm run version:check
+      - run: npm test
+      - run: npm run test:e2e
+      - run: npm run test:pwa
       - run: npm run build:web
       - uses: actions/upload-pages-artifact@v3
         with:
