@@ -194,8 +194,8 @@ test("首页、菜单和游戏无 serious/critical axe 问题", async ({ page })
 
 test("强玻璃有标准/WebKit blur，手动降低透明度即时实色", async ({ page }) => {
   await page.goto("/");
-  const play = page.locator(".home-play");
-  const before = await play.evaluate((element) => ({
+  const panel = page.locator(".home-panel");
+  const before = await panel.evaluate((element) => ({
     backdrop: getComputedStyle(element).backdropFilter,
     webkit: getComputedStyle(element).getPropertyValue("-webkit-backdrop-filter"),
     shadow: getComputedStyle(element).boxShadow,
@@ -204,23 +204,30 @@ test("强玻璃有标准/WebKit blur，手动降低透明度即时实色", async
   expect(before.shadow).toMatch(
     /rgba?\(\s*42\s*,\s*57\s*,\s*45(?:\s*,|\s*\/\s*)\s*0\.6\s*\)/,
   );
+  const play = page.locator(".home-play");
+  const playBefore = await play.evaluate((element) => ({
+    color: getComputedStyle(element).color,
+    image: getComputedStyle(element).backgroundImage,
+  }));
+  expect(playBefore.color).toBe("rgb(255, 255, 255)");
+  expect(playBefore.image).toContain("linear-gradient");
 
   await page.locator(".transparency-btn").click();
   await expect(page.locator("html")).toHaveAttribute("data-reduced-transparency", "true");
-  const after = await play.evaluate((element) => ({
+  const after = await panel.evaluate((element) => ({
     backdrop: getComputedStyle(element).backdropFilter,
     webkit: getComputedStyle(element).getPropertyValue("-webkit-backdrop-filter"),
-    color: getComputedStyle(element).color,
     background: getComputedStyle(element).backgroundColor,
     beforeDisplay: getComputedStyle(element, "::before").display,
     afterDisplay: getComputedStyle(element, "::after").display,
   }));
   expect([after.backdrop, after.webkit].every((value) => value === "none" || value === ""))
     .toBe(true);
-  expect(after.color).toBe("rgb(255, 255, 255)");
-  expect(after.background).toBe("rgb(49, 92, 62)");
+  expect(after.background).toBe("rgba(247, 248, 244, 0.96)");
   expect(after.beforeDisplay).toBe("none");
   expect(after.afterDisplay).toBe("none");
+  expect(await play.evaluate((element) => getComputedStyle(element).color))
+    .toBe("rgb(255, 255, 255)");
 });
 
 test("同一视觉簇没有嵌套光学表面，棋盘没有 glass/filter", async ({ page }) => {

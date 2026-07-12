@@ -99,8 +99,10 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   game.className = "game";
 
   const top = document.createElement("header");
-  top.className = "game-top glass-compact";
-  top.dataset["liquidGlass"] = "";
+  top.className = "game-top";
+  const topActions = document.createElement("div");
+  topActions.className = "top-actions glass-compact";
+  topActions.dataset["liquidGlass"] = "";
   const backBtn = button("pill back", "←", exit);
   backBtn.setAttribute("aria-label", "返回选关");
   const title = document.createElement("div");
@@ -121,7 +123,11 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   stats.append(mineStat, timeStat);
   const soundBtn = button("pill stat game-sound", "", toggleSound);
   stats.appendChild(soundBtn);
-  top.append(backBtn, title, stats);
+  const restartBtn = button("pill restart", "↻", restart);
+  restartBtn.setAttribute("aria-label", "重开");
+  stats.appendChild(restartBtn);
+  topActions.append(backBtn, title, stats);
+  top.appendChild(topActions);
 
   const boardVp = document.createElement("div");
   boardVp.className = "board-viewport";
@@ -147,20 +153,20 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   modeToggle.className = "mode-toggle";
   modeToggle.setAttribute("role", "group");
   modeToggle.setAttribute("aria-label", "点按模式");
-  const digBtn = button("mode-btn active", "⛏ 挖开", () => setMode("dig"));
-  const flagBtn = button("mode-btn", "🚩 插旗", () => setMode("flag"));
+  const digBtn = tabButton("mode-btn tab-btn active", "⛏", "挖开", () => setMode("dig"));
+  const flagBtn = tabButton("mode-btn tab-btn", "🚩", "插旗", () => setMode("flag"));
   modeToggle.append(digBtn, flagBtn);
 
   const viewControls = document.createElement("div");
   viewControls.className = "view-controls";
   viewControls.setAttribute("role", "group");
   viewControls.setAttribute("aria-label", "棋盘显示尺寸");
-  const fitBtn = button("view-mode-btn", "适合屏幕", () => setViewMode("fit"));
-  const operableBtn = button("view-mode-btn", "可操作尺寸", () => setViewMode("operable"));
+  const fitBtn = tabButton("view-mode-btn tab-btn", "🔲", "适合屏幕", () => setViewMode("fit"));
+  const operableBtn = tabButton("view-mode-btn tab-btn", "🔍", "可操作尺寸",
+    () => setViewMode("operable"));
   viewControls.append(fitBtn, operableBtn);
 
-  const restartBtn = button("pill restart", "↻ 重开", restart);
-  bottomActions.replaceChildren(modeToggle, viewControls, restartBtn);
+  bottomActions.replaceChildren(modeToggle, viewControls);
   const hint = document.createElement("p");
   hint.className = "pc-hint";
   hint.textContent = "左键挖开 · 右键插旗 · 滚轮缩放 · 拖动平移";
@@ -773,6 +779,25 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     btn.dataset["jelly"] = "";
     btn.textContent = label;
     btn.addEventListener("click", onClick);
+    return btn;
+  }
+
+  /** Tab 式按钮:图标在上标签在下(底栏参照 iOS 玻璃 Tab 栏设计) */
+  function tabButton(
+    cls: string,
+    icon: string,
+    label: string,
+    onClick: () => void,
+  ): HTMLButtonElement {
+    const btn = button(cls, "", onClick);
+    const iconEl = document.createElement("span");
+    iconEl.className = "tab-icon";
+    iconEl.setAttribute("aria-hidden", "true");
+    iconEl.textContent = icon;
+    const labelEl = document.createElement("span");
+    labelEl.className = "tab-label";
+    labelEl.textContent = label;
+    btn.replaceChildren(iconEl, labelEl);
     return btn;
   }
 }

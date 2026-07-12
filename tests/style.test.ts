@@ -85,9 +85,12 @@ describe("Liquid Glass 静态约束", () => {
     const active = optionalDeclarations(style, ".btn:active");
     expect(active).not.toMatch(/\b(?:transform|filter)\s*:/);
   });
-  it("首页主按钮不重复定义 Liquid Glass 材质", () => {
+  it("首页面板不重复定义 Liquid Glass 材质,主按钮自带实色不透视", () => {
+    const homePanel = declarations(style, ".home-panel");
+    expect(homePanel).not.toMatch(/\b(?:background|backdrop-filter|filter|box-shadow)\s*:/);
     const homePlay = declarations(style, ".home-play");
-    expect(homePlay).not.toMatch(/\b(?:background|backdrop-filter|filter|box-shadow)\s*:/);
+    expect(homePlay).not.toMatch(/backdrop-filter/);
+    expect(homePlay).toMatch(/\bbackground\s*:/);
   });
   it("透明表面边界合成到白色/纸色后仍达到 3:1", () => {
     const boundary = rgbaVar(glass, "--glass-boundary");

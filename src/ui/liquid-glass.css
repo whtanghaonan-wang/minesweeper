@@ -100,8 +100,6 @@
   box-shadow: var(--glass-elevation);
 }
 
-.game-top[data-liquid-glass],
-.bottom-actions[data-liquid-glass],
 .modal[data-liquid-glass],
 .pwa-update-prompt[data-liquid-glass] {
   --glass-radius: 1.5rem;

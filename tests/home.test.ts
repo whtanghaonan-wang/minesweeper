@@ -44,20 +44,18 @@ function show(storage = createStorage(memBackend()), over: Partial<Parameters<ty
 }
 
 describe("首页", () => {
-  it("首页每个独立操作都是单层 glass + jelly，且有内容层", () => {
+  it("首页底部面板是唯一玻璃面,内部按钮只 jelly 不嵌套光学表面", () => {
     show();
+    const panel = root.querySelector<HTMLElement>(".home-panel")!;
+    expect(panel.hasAttribute("data-liquid-glass")).toBe(true);
+    expect(panel.classList.contains("glass-clear")).toBe(true);
+    expect(root.querySelectorAll("[data-liquid-glass]")).toHaveLength(1);
     for (const selector of [".home-play", ".home-select", ".home-endless",
       ".sound-btn", ".transparency-btn"]) {
       const button = root.querySelector<HTMLButtonElement>(selector)!;
-      expect(button.hasAttribute("data-liquid-glass"), selector).toBe(true);
+      expect(button.hasAttribute("data-liquid-glass"), selector).toBe(false);
       expect(button.hasAttribute("data-jelly"), selector).toBe(true);
-      expect(button.querySelector(":scope > .glass-content"), selector).not.toBeNull();
-      expect(button.matches(".glass-clear, .glass-tinted"), selector).toBe(true);
-    }
-    expect(root.querySelector(".home-play")!.classList.contains("glass-tinted")).toBe(true);
-    for (const selector of [".home-select", ".home-endless", ".sound-btn",
-      ".transparency-btn"]) {
-      expect(root.querySelector(selector)!.classList.contains("glass-clear"), selector).toBe(true);
+      expect(panel.contains(button), selector).toBe(true);
     }
   });
 

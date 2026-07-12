@@ -212,7 +212,7 @@ describe("游戏页", () => {
 
   it("游戏只有 top/bottom 两层 surface，内部按钮只 jelly，棋盘不玻璃化", () => {
     start();
-    const surfaces = root.querySelectorAll(".game-top[data-liquid-glass], " +
+    const surfaces = root.querySelectorAll(".top-actions[data-liquid-glass], " +
       ".bottom-actions[data-liquid-glass]");
     expect(surfaces).toHaveLength(2);
     expect([...surfaces].every((surface) => surface.classList.contains("glass-compact")))
@@ -418,11 +418,14 @@ describe("游戏页", () => {
     expect(toggles).toEqual([false]);
   });
 
-  it("悬浮布局:提示行并入底栏,操作行有包裹容器", () => {
+  it("悬浮布局:提示行并入底栏,重开是顶栏图标钮,底栏只剩模式/尺寸组", () => {
     start();
     expect(root.querySelector(".game-bottom .pc-hint")).not.toBeNull();
     expect(root.querySelector(".game-bottom .bottom-actions .mode-toggle")).not.toBeNull();
-    expect(root.querySelector(".game-bottom .bottom-actions .restart")).not.toBeNull();
+    expect(root.querySelector(".game-bottom .restart")).toBeNull();
+    const restart = root.querySelector<HTMLButtonElement>(".game-top .restart")!;
+    expect(restart).not.toBeNull();
+    expect(restart.getAttribute("aria-label")).toBe("重开");
     expect(root.querySelector(".game > .board-viewport")).not.toBeNull();
   });
 
