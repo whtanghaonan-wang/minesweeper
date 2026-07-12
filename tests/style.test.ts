@@ -88,10 +88,21 @@ describe("Liquid Glass 静态约束", () => {
   it("首页面板不重复定义 Liquid Glass 材质,主按钮自带实色不透视", () => {
     const homePanel = declarations(style, ".home-panel");
     expect(homePanel).not.toMatch(/\b(?:background|backdrop-filter|filter|box-shadow)\s*:/);
-    expect(homePanel).toContain("--glass-radius: 3rem");
+    expect(homePanel).toContain("--glass-radius: 999px");
     const homePlay = declarations(style, ".home-play");
     expect(homePlay).not.toMatch(/backdrop-filter/);
     expect(homePlay).toMatch(/\bbackground\s*:/);
+  });
+  it("v2.4 首页在桌面是横向胶囊，手机改为双层触控条", () => {
+    const home = declarations(style, ".home");
+    expect(home).toContain("max-width: none");
+    const panel = declarations(style, ".home-panel");
+    expect(panel).toContain("--glass-radius: 999px");
+    expect(panel).toContain("grid-template-areas");
+    expect(panel).toContain("max-width: 54rem");
+    expect(style).toContain(".home-secondary-actions");
+    expect(style).toContain(".home-tools");
+    expect(style).toMatch(/@media \(max-width: 720px\)[\s\S]*"stats tools"[\s\S]*"play play"/);
   });
   it("移动端游戏顶栏收窄并让四个统计/操作槽位等宽对称", () => {
     const gameTop = declarations(style, ".game-top");

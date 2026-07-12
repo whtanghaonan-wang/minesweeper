@@ -752,19 +752,21 @@ button:disabled {
   }
 }
 
-/* ===== 首页(v2.1)===== */
+/* ===== 首页(v2.4)===== */
 .home {
   width: 100%;
-  max-width: 27rem;
+  max-width: none;
   min-height: 100dvh;
   display: flex;
   flex-direction: column;
-  padding: max(1.5rem, env(safe-area-inset-top)) 1.375rem
-    calc(1.5rem + env(safe-area-inset-bottom));
+  align-items: center;
+  padding: max(1.5rem, env(safe-area-inset-top)) clamp(1rem, 3vw, 3rem)
+    calc(1.25rem + env(safe-area-inset-bottom));
 }
 
 .home-hero {
   position: relative;
+  width: min(27rem, 100%);
   flex: 1;
   min-height: 16rem;
   display: flex;
@@ -839,21 +841,36 @@ button:disabled {
 }
 
 .home-panel {
-  --glass-radius: 3rem;
-  padding: 1.25rem 1.5rem 1rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.875rem;
+  --glass-radius: 999px;
+  width: min(100%, 54rem);
+  max-width: 54rem;
+  display: grid;
+  grid-template-columns: minmax(11rem, 1.1fr) minmax(15rem, 1.25fr)
+    minmax(13rem, 1fr) auto;
+  grid-template-areas:
+    "stats play secondary tools"
+    "bar play secondary tools";
+  align-items: center;
+  gap: 0.35rem 0.75rem;
+  padding: 0.75rem 1rem;
 }
 
 .home-stats {
+  grid-area: stats;
+  min-width: 0;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
+  gap: 0.25rem 0.75rem;
   font-size: 0.8125rem;
   color: var(--ink-soft);
+}
+
+.home-tools {
+  grid-area: tools;
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
 }
 
 .sound-btn,
@@ -874,6 +891,8 @@ button:disabled {
 }
 
 .home-bar {
+  grid-area: bar;
+  width: 100%;
   height: 0.4rem;
   background: var(--cell);
   border-radius: 999px;
@@ -887,14 +906,9 @@ button:disabled {
   transition: width 0.4s ease;
 }
 
-.home-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.625rem;
-}
-
 .home-play {
-  flex: 1 1 100%;
+  grid-area: play;
+  width: 100%;
   min-width: 0;
   padding: 0.8125rem 0;
   color: #fff;
@@ -924,13 +938,21 @@ html[data-reduced-transparency] .home-play {
 
 .home-select,
 .home-endless {
-  flex: 1;
+  min-width: 0;
   padding: 0.8125rem 0;
   color: var(--ink);
   border-radius: 999px;
   font-size: 0.9375rem;
   background: rgba(255, 255, 255, 0.66);
   border: 1px solid var(--glass-boundary);
+}
+
+.home-secondary-actions {
+  grid-area: secondary;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.35rem;
 }
 
 .home-endless.locked {
@@ -946,9 +968,32 @@ html[data-reduced-transparency] .home-play {
 }
 
 .home-ver {
+  margin-top: 0.35rem;
   text-align: center;
   font-size: 0.6875rem;
   color: var(--ink-soft);
+}
+
+@media (max-width: 720px) {
+  .home-panel {
+    width: min(100%, 24rem);
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "stats tools"
+      "bar bar"
+      "play play"
+      "secondary secondary";
+    gap: 0.625rem;
+    padding: 1rem 1.125rem;
+  }
+
+  .home-stats {
+    align-content: center;
+  }
+
+  .home-secondary-actions {
+    gap: 0.625rem;
+  }
 }
 
 .pwa-update-prompt {
