@@ -92,6 +92,19 @@ describe("Liquid Glass 静态约束", () => {
     expect(homePlay).not.toMatch(/backdrop-filter/);
     expect(homePlay).toMatch(/\bbackground\s*:/);
   });
+  it("玻璃面上的扁平控件用 3:1 边界环,实色降级下仍可辨", () => {
+    expect(style).toMatch(
+      /\.sound-btn,\s*\.transparency-btn\s*\{[^}]*1px solid var\(--glass-boundary\)/,
+    );
+    expect(style).toMatch(
+      /\.home-select,\s*\.home-endless\s*\{[^}]*1px solid var\(--glass-boundary\)/,
+    );
+    expect(style).toMatch(
+      /\.tab-btn\.active,\s*\.tab-btn\[aria-pressed="true"\]\s*\{[^}]*0 0 0 1px var\(--glass-boundary\)/,
+    );
+    expect(declarations(style, "html[data-reduced-transparency] .home-play"))
+      .toContain("#315c3e");
+  });
   it("透明表面边界合成到白色/纸色后仍达到 3:1", () => {
     const boundary = rgbaVar(glass, "--glass-boundary");
     for (const background of [[255, 255, 255], [242, 239, 233]] as Rgb[]) {

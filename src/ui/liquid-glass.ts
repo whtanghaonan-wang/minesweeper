@@ -198,8 +198,17 @@ export function installLiquidGlass(root: EventRoot): LiquidGlassController {
 
     keyboardPressed.add(target);
     releaseCleanups.get(target)?.();
-    surface.style.setProperty("--glass-x", "50%");
-    surface.style.setProperty("--glass-y", "50%");
+    // 共享玻璃面上高光跟随被按目标的中心;目标/表面无布局信息(如 jsdom)时回退表面中心
+    const surfaceRect = surface.getBoundingClientRect();
+    const targetRect = target.getBoundingClientRect();
+    const x = surfaceRect.width > 0 && targetRect.width > 0
+      ? clamp((targetRect.left + targetRect.width / 2 - surfaceRect.left) / surfaceRect.width)
+      : 0.5;
+    const y = surfaceRect.height > 0 && targetRect.height > 0
+      ? clamp((targetRect.top + targetRect.height / 2 - surfaceRect.top) / surfaceRect.height)
+      : 0.5;
+    surface.style.setProperty("--glass-x", `${Math.round(x * 10000) / 100}%`);
+    surface.style.setProperty("--glass-y", `${Math.round(y * 10000) / 100}%`);
     surface.style.setProperty("--glass-dx", "0");
     surface.style.setProperty("--glass-dy", "0");
     target.classList.remove("is-glass-releasing");

@@ -240,6 +240,20 @@ describe("installLiquidGlass", () => {
     }
   });
 
+  it("键盘按压时高光跟随目标按钮中心(共享大玻璃面不落在面板几何中心)", () => {
+    Object.defineProperty(button, "getBoundingClientRect", {
+      value: () => ({
+        left: 90, top: 20, width: 20, height: 50, right: 110, bottom: 70,
+        x: 90, y: 20, toJSON: () => ({}),
+      }),
+    });
+    const controller = installLiquidGlass(document);
+    button.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+    expect(surface.style.getPropertyValue("--glass-x")).toBe("90%");
+    expect(surface.style.getPropertyValue("--glass-y")).toBe("50%");
+    controller.destroy();
+  });
+
   it("Enter/Space 使用中心高光，快速重复 release 不残留，cancelAll/destroy 清状态", () => {
     const controller = installLiquidGlass(document);
     button.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
