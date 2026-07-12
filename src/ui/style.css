@@ -453,19 +453,24 @@ button:disabled {
   cursor: default;
 }
 
-.cell.pop {
-  animation: cell-pop 0.22s ease-out backwards;
+.cell.cell-pop {
+  animation: cell-pop 180ms cubic-bezier(.2, .9, .3, 1) both;
+}
+
+.cell.cell-tap {
+  animation: cell-tap 170ms cubic-bezier(.2, .9, .3, 1) both;
 }
 
 @keyframes cell-pop {
-  from {
-    transform: scale(0.65);
-    opacity: 0.4;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
+  0% { transform: scale(.90); opacity: .72; }
+  62% { transform: scale(1.04); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes cell-tap {
+  0% { transform: scale(.90); }
+  58% { transform: scale(1.035); }
+  100% { transform: scale(1); }
 }
 
 .cell.flagged,
@@ -606,13 +611,12 @@ button:disabled {
   justify-content: center;
   padding: 1.5rem;
   z-index: 10;
-  animation: overlay-in 0.2s ease-out;
+  animation: overlay-in 120ms ease-out both;
 }
 
 @keyframes overlay-in {
-  from {
-    opacity: 0;
-  }
+  from { background-color: rgba(74, 69, 62, 0); }
+  to { background-color: rgba(74, 69, 62, .32); }
 }
 
 .modal {
@@ -623,14 +627,14 @@ button:disabled {
   align-items: center;
   gap: 0.5rem;
   text-align: center;
-  animation: modal-in 0.24s cubic-bezier(0.34, 1.4, 0.64, 1) backwards;
+  animation: modal-jelly-in 440ms cubic-bezier(.2, .9, .25, 1) both;
 }
 
-@keyframes modal-in {
-  from {
-    transform: scale(0.86);
-    opacity: 0;
-  }
+@keyframes modal-jelly-in {
+  0% { transform: scale(.86) scaleY(.92); opacity: 0; }
+  48% { transform: scale(1.045) scaleY(1.025); opacity: 1; }
+  74% { transform: scale(.992) scaleY(.996); }
+  100% { transform: scale(1); }
 }
 
 .modal-icon {
@@ -700,7 +704,20 @@ button:disabled {
   *::before,
   *::after {
     transition-duration: 0.01ms !important;
-    animation-duration: 0.01ms !important;
+  }
+
+  .cell.cell-pop,
+  .cell.cell-tap,
+  .modal {
+    animation: none;
+  }
+
+  .vine-node.current {
+    animation: none;
+  }
+
+  .overlay {
+    animation-duration: 100ms;
   }
 }
 

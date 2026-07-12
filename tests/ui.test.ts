@@ -1,4 +1,5 @@
 /** @vitest-environment jsdom */
+import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createBoard } from "../src/core/board";
 import { LEVELS } from "../src/core/levels";
@@ -497,6 +498,112 @@ describe("游戏页", () => {
     expect(root.querySelector(".mode-btn:last-child")!.getAttribute("aria-pressed")).toBe("true");
   });
 
+  it("L50 级联只给可视且距原点最近的前 64 格加有限动画并在当前代 end 后清理", () => {
+    const specLogicalWidth = 28;
+    const l50 = LEVELS[49]!;
+    expect(l50.width).toBe(specLogicalWidth);
+    Object.defineProperty(window, "innerWidth", { value: 400, configurable: true });
+    Object.defineProperty(window, "innerHeight", { value: 800, configurable: true });
+    showGame(root, {
+      level: l50,
+      onExit: () => {},
+      onFinish: () => {},
+      onToggleSound: () => {},
+    });
+    const viewport = root.querySelector<HTMLElement>(".board-viewport")!;
+    Object.defineProperty(viewport, "getBoundingClientRect", {
+      value: () => ({
+        x: 0, y: 0, left: 0, top: 0, right: 400, bottom: 800,
+        width: 400, height: 800, toJSON: () => ({}),
+      }),
+    });
+    const boardSize = specLogicalWidth * 44;
+    const originLogical = boardSize - 1;
+    const visibleLogical = Array.from({ length: 70 }, (_, offset) => boardSize - 70 + offset);
+    const visibleSet = new Set(visibleLogical);
+    expect(visibleLogical[0]).toBeGreaterThan(6); // mock 雷固定为 0..6，这 70 格均会随末格空白级联揭开
+    for (const cell of root.querySelectorAll<HTMLElement>(".cell")) {
+      const logical = Number(cell.dataset["logicalIndex"]);
+      const visible = visibleSet.has(logical);
+      Object.defineProperty(cell, "getBoundingClientRect", {
+        value: () => ({
+          x: visible ? 20 : 420,
+          y: 100,
+          left: visible ? 20 : 420,
+          top: 100,
+          right: visible ? 44 : 444,
+          bottom: 124,
+          width: 24, height: 24, toJSON: () => ({}),
+        }),
+      });
+    }
+    let active = root.querySelector<HTMLButtonElement>('[role=gridcell][tabindex="0"]')!;
+    active.dispatchEvent(new KeyboardEvent("keydown", {
+      key: "End", ctrlKey: true, bubbles: true,
+    }));
+    active = root.querySelector<HTMLButtonElement>('[role=gridcell][tabindex="0"]')!;
+    active.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+
+    const expected = [...visibleLogical]
+      .sort((a, b) => {
+        const ax = a % specLogicalWidth;
+        const ay = Math.floor(a / specLogicalWidth);
+        const bx = b % specLogicalWidth;
+        const by = Math.floor(b / specLogicalWidth);
+        const ox = originLogical % specLogicalWidth;
+        const oy = Math.floor(originLogical / specLogicalWidth);
+        const ad = Math.abs(ax - ox) + Math.abs(ay - oy);
+        const bd = Math.abs(bx - ox) + Math.abs(by - oy);
+        return ad - bd || a - b;
+      })
+      .slice(0, 64);
+    const animated = root.querySelectorAll<HTMLElement>(".cell-pop");
+    const animatedLogical = new Set(
+      [...animated].map((cell) => Number(cell.dataset["logicalIndex"])),
+    );
+    expect(animated).toHaveLength(64);
+    expect(animatedLogical).toEqual(new Set(expected));
+    expect([...animatedLogical].every((logical) => visibleSet.has(logical))).toBe(true);
+    expect(animatedLogical.has(originLogical)).toBe(true);
+    expect(root.querySelector(`[data-logical-index="${boardSize - 71}"]`)!.classList)
+      .not.toContain("cell-pop");
+    const start = new Event("animationstart");
+    Object.defineProperty(start, "animationName", { value: "cell-pop" });
+    animated[0]!.dispatchEvent(start);
+    const end = new Event("animationend");
+    Object.defineProperty(end, "animationName", { value: "cell-pop" });
+    animated[0]!.dispatchEvent(end);
+    expect(animated[0]!.classList.contains("cell-pop")).toBe(false);
+  });
+
+  it("预旗和盘上插旗只给目标格 cell-tap，通关不清最后揭格 cell-pop", () => {
+    const cells = start();
+    press(cells[7]!, { button: 2 });
+    expect(cells[7]!.classList.contains("cell-tap")).toBe(true);
+    expect(root.querySelectorAll(".cell-tap")).toHaveLength(1);
+    press(cells[7]!, { button: 2 });
+    const viewport = root.querySelector<HTMLElement>(".board-viewport")!;
+    Object.defineProperty(viewport, "getBoundingClientRect", {
+      value: () => ({
+        x: 0, y: 0, left: 0, top: 0, right: 400, bottom: 800,
+        width: 400, height: 800, toJSON: () => ({}),
+      }),
+    });
+    Object.defineProperty(cells[7]!, "getBoundingClientRect", {
+      value: () => ({
+        x: 20, y: 20, left: 20, top: 20, right: 60, bottom: 60,
+        width: 40, height: 40, toJSON: () => ({}),
+      }),
+    });
+    press(cells[63]!);
+    press(cells[7]!, { button: 2 });
+    expect(cells[7]!.classList.contains("cell-tap")).toBe(true);
+    expect(root.querySelectorAll(".cell-tap")).toHaveLength(1);
+    press(cells[7]!, { button: 2 });
+    press(cells[7]!);
+    expect(cells[7]!.classList.contains("cell-pop")).toBe(true);
+  });
+
   it("无尽模式:标题显示 ♾ 无尽与连胜徽章", () => {
     vi.useFakeTimers();
     Object.defineProperty(window, "innerWidth", { value: 400, configurable: true });
@@ -625,5 +732,27 @@ describe("结算弹窗", () => {
     const buttons = [...overlay.querySelectorAll("button")].map((b) => b.textContent);
     expect(buttons).toContain("再来一盘");
     expect(buttons).toContain("回首页");
+  });
+});
+
+describe("有限动效 CSS", () => {
+  const css = readFileSync("src/ui/style.css", "utf8");
+
+  it("棋盘反馈和结果进入使用指定短时长且不常驻 will-change", () => {
+    expect(css).toMatch(/\.cell\.cell-pop\s*{[^}]*animation:\s*cell-pop 180ms/);
+    expect(css).toMatch(/\.cell\.cell-tap\s*{[^}]*animation:\s*cell-tap 170ms/);
+    const overlay = css.match(/\.overlay\s*{([^}]*)}/)?.[1] ?? "";
+    expect(overlay).toMatch(/animation:\s*overlay-in 120ms/);
+    expect(overlay).not.toMatch(/backdrop-filter/);
+    expect(css).toMatch(/\.modal\s*{[^}]*animation:\s*modal-jelly-in 440ms/);
+    const boardRules = css.match(/\.board[^}]*}|\.cell[^}]*}/g)?.join("\n") ?? "";
+    expect(boardRules).not.toMatch(/filter:|will-change/);
+  });
+
+  it("减少动态关闭格子和弹窗果冻，仅保留短遮罩过渡", () => {
+    const reduced = css.match(/@media \(prefers-reduced-motion: reduce\)\s*{([\s\S]*?)\n}/)?.[1] ?? "";
+    expect(reduced).toMatch(/\.cell\.cell-pop[\s\S]*\.modal\s*{\s*animation:\s*none/);
+    expect(reduced).toMatch(/\.vine-node\.current\s*{\s*animation:\s*none/);
+    expect(reduced).toMatch(/\.overlay\s*{\s*animation-duration:\s*100ms/);
   });
 });

@@ -25,11 +25,13 @@ import {
   cellAriaLabel,
   createBoardLayout,
   gridKeyTarget,
+  selectCascadeCells,
   toLogicalIndex,
   toVisualIndex,
   type CellA11yState,
 } from "./board-grid";
 import { fmtTime } from "./format";
+import { restartFiniteAnimation, restartFiniteAnimations } from "./motion";
 import { createUiPrefs, type UiPrefsStore } from "./ui-prefs";
 import {
   BASE_CELL_PX,
@@ -70,8 +72,6 @@ export interface GameDeps {
 type Mode = "dig" | "flag";
 
 const LONG_PRESS_MS = 350;
-const CASCADE_STEP_MS = 12;
-const CASCADE_MAX_MS = 240;
 const FINISH_PAUSE_MS = 700;
 const WHEEL_STEP = 1.15;
 
@@ -501,6 +501,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
           playFlag();
         }
         syncCell(logical);
+        restartFiniteAnimation(cells[logical]!, "cell-tap", "cell-tap");
         updateStats();
         return;
       }
@@ -515,6 +516,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
       if (toggleFlag(currentBoard, logical)) playFlag();
       else playUnflag();
       syncCell(logical);
+      restartFiniteAnimation(cells[logical]!, "cell-tap", "cell-tap");
       updateStats();
       return;
     }
@@ -525,7 +527,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
       if (!wasOpen && currentBoard.adjacent[logical] === 0) playBlank();
       else playNumber();
     }
-    if (result.changed.length > 0) syncChanged(result.changed);
+    if (result.changed.length > 0) syncChanged(result.changed, logical);
     updateStats();
     if (result.exploded) {
       let boomLogical: number | null = currentBoard.mine[logical] ? logical : null;
@@ -597,10 +599,14 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     window.removeEventListener("resize", onResize);
     playWin();
     const currentBoard = board!;
+    const autoFlagged: number[] = [];
     for (let logical = 0; logical < size; logical++) {
-      if (currentBoard.mine[logical] && !currentBoard.flagged[logical]) toggleFlag(currentBoard, logical);
+      if (currentBoard.mine[logical] && !currentBoard.flagged[logical]) {
+        toggleFlag(currentBoard, logical);
+        autoFlagged.push(logical);
+      }
     }
-    syncAll();
+    for (const logical of autoFlagged) syncCell(logical);
     updateStats();
     pendingFinish = { won: true, timeSec: elapsedSec() };
     finishTimer = setTimeout(() => {
@@ -672,13 +678,27 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     showGame(root, deps);
   }
 
-  function syncChanged(changedLogical: number[]): void {
-    changedLogical.forEach((logical, index) => {
-      syncCell(logical);
-      const cell = cells[logical]!;
-      cell.classList.add("pop");
-      cell.style.animationDelay = `${Math.min(index * CASCADE_STEP_MS, CASCADE_MAX_MS)}ms`;
-    });
+  function syncChanged(changedLogical: number[], originLogical: number): void {
+    for (const logical of changedLogical) syncCell(logical);
+    if (globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+    const viewportRect = boardVp.getBoundingClientRect();
+    const selected = selectCascadeCells(
+      changedLogical,
+      originLogical,
+      level.width,
+      (logical) => {
+        const rect = cells[logical]!.getBoundingClientRect();
+        return rect.right > viewportRect.left && rect.left < viewportRect.right &&
+          rect.bottom > viewportRect.top && rect.top < viewportRect.bottom;
+      },
+      64,
+    );
+    restartFiniteAnimations(
+      selected.map((logical) => cells[logical]!),
+      boardEl,
+      "cell-pop",
+      "cell-pop",
+    );
   }
 
   function syncAll(): void {
