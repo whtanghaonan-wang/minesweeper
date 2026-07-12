@@ -88,9 +88,21 @@ describe("Liquid Glass 静态约束", () => {
   it("首页面板不重复定义 Liquid Glass 材质,主按钮自带实色不透视", () => {
     const homePanel = declarations(style, ".home-panel");
     expect(homePanel).not.toMatch(/\b(?:background|backdrop-filter|filter|box-shadow)\s*:/);
+    expect(homePanel).toContain("--glass-radius: 3rem");
     const homePlay = declarations(style, ".home-play");
     expect(homePlay).not.toMatch(/backdrop-filter/);
     expect(homePlay).toMatch(/\bbackground\s*:/);
+  });
+  it("移动端游戏顶栏收窄并让四个统计/操作槽位等宽对称", () => {
+    const gameTop = declarations(style, ".game-top");
+    expect(gameTop).toContain("padding: max(0.625rem, env(safe-area-inset-top) + 0.25rem) 1.75rem");
+    const topActions = declarations(style, ".top-actions");
+    expect(topActions).toContain("grid-template-areas");
+    const narrow = style.match(/@media \(max-width: 420px\), \(max-height: 620px\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    expect(narrow).toContain("grid-template-columns: auto minmax(0, 1fr)");
+    expect(narrow).toContain("grid-template-columns: repeat(4, minmax(0, 1fr))");
+    expect(declarations(style, ".game-sound")).toContain("font-size: 1.25rem");
+    expect(declarations(style, ".restart")).toContain("font-size: 1.5rem");
   });
   it("玻璃面上的扁平控件用 3:1 边界环,实色降级下仍可辨", () => {
     expect(style).toMatch(
