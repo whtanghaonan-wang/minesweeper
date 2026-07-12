@@ -43,6 +43,9 @@ const h = vi.hoisted(() => ({
   cancelAllLiquidGlass: vi.fn(),
   destroyLiquidGlass: vi.fn(),
   installLiquidGlass: vi.fn(),
+  pwa: { enterRoute: vi.fn() },
+  mountPwaPrompt: vi.fn(),
+  connectPwaRegistration: vi.fn(),
   home: undefined as HomeDeps | undefined,
   menu: undefined as MenuDeps | undefined,
   game: undefined as GameDeps | undefined,
@@ -101,6 +104,11 @@ vi.mock("../src/ui/liquid-glass", () => ({
     return { cancelAll: h.cancelAllLiquidGlass, destroy: h.destroyLiquidGlass };
   },
 }));
+vi.mock("../src/ui/pwa-update", () => ({
+  createPwaUpdateCoordinator: () => h.pwa,
+  connectPwaRegistration: h.connectPwaRegistration,
+}));
+vi.mock("../src/ui/pwa-prompt", () => ({ mountPwaPrompt: h.mountPwaPrompt }));
 
 const campaignLevel = {
   id: 1,
@@ -145,6 +153,9 @@ beforeEach(() => {
   h.cancelAllLiquidGlass.mockReset();
   h.destroyLiquidGlass.mockReset();
   h.installLiquidGlass.mockReset();
+  h.pwa.enterRoute.mockReset();
+  h.mountPwaPrompt.mockReset();
+  h.connectPwaRegistration.mockReset();
   document.body.innerHTML = '<div id="app"></div>';
   localStorage.clear();
   Reflect.deleteProperty(navigator, "serviceWorker");
@@ -368,5 +379,21 @@ describe("应用壳持久化可靠性", () => {
     h.visibilityHandler!();
 
     expect(h.storage.flushPending).toHaveBeenCalledTimes(1);
+  });
+
+  it("首页/菜单/游戏/结果只向 PWA 协调器报告真实安全状态", async () => {
+    await boot();
+    expect(h.mountPwaPrompt).toHaveBeenCalledTimes(1);
+    expect(h.pwa.enterRoute).toHaveBeenLastCalledWith("home");
+    h.home!.onSelect();
+    expect(h.pwa.enterRoute).toHaveBeenLastCalledWith("menu");
+    h.menu!.onBack();
+    expect(h.pwa.enterRoute).toHaveBeenLastCalledWith("home");
+    h.home!.onEndless();
+    expect(h.pwa.enterRoute).toHaveBeenLastCalledWith("game");
+    h.game!.onFinish({ won: true, timeSec: 3 });
+    expect(h.pwa.enterRoute).toHaveBeenLastCalledWith("result");
+    h.result!.onMenu();
+    expect(h.pwa.enterRoute).toHaveBeenLastCalledWith("home");
   });
 });

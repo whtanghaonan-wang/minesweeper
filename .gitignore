@@ -11,3 +11,5 @@ gen-bench.tmp.txt
 /test-results/
 /playwright-report/
 /blob-report/
+.pwa-fixtures/
+artifacts/

@@ -14,6 +14,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:e2e": "playwright test",
+    "test:pwa": "node scripts/test-pwa-update.mjs",
     "version:sync": "node scripts/version.mjs sync",
     "version:check": "node scripts/version.mjs check",
     "version:check:tag": "node scripts/version.mjs check --tag"

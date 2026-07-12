@@ -15,7 +15,7 @@ export default defineConfig({
   },
   plugins: [
     VitePWA({
-      registerType: "autoUpdate",
+      registerType: "prompt",
       injectRegister: false, // main.ts 中按环境手动注册
       manifest: {
         name: "扫雷",
@@ -38,6 +38,9 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,svg,png,webmanifest}"],
+        ...(process.env["PWA_TEST_CACHE_ID"]
+          ? { cacheId: process.env["PWA_TEST_CACHE_ID"] }
+          : {}),
       },
     }),
   ],

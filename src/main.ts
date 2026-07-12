@@ -11,9 +11,16 @@ import { mulberry32 } from "./core/rng";
 import { setPersistenceWarning } from "./ui/persistence-warning";
 import { applyReducedTransparency, createUiPrefs } from "./ui/ui-prefs";
 import { installLiquidGlass } from "./ui/liquid-glass";
+import {
+  connectPwaRegistration,
+  createPwaUpdateCoordinator,
+} from "./ui/pwa-update";
+import { mountPwaPrompt } from "./ui/pwa-prompt";
 import { APP_VERSION } from "./version";
 
 const root = document.querySelector<HTMLDivElement>("#app")!;
+const pwaUpdates = createPwaUpdateCoordinator();
+mountPwaPrompt(pwaUpdates);
 
 function localStorageBackend(): globalThis.Storage | undefined {
   try {
@@ -62,6 +69,7 @@ function retryPending(): void {
 setMuted(!storage.load().soundOn);
 
 function gotoHome(): void {
+  pwaUpdates.enterRoute("home");
   retryPending();
   showHome(root, {
     storage,
@@ -75,6 +83,7 @@ function gotoHome(): void {
 }
 
 function gotoMenu(): void {
+  pwaUpdates.enterRoute("menu");
   retryPending();
   showMenu(root, {
     storage,
@@ -85,6 +94,7 @@ function gotoMenu(): void {
 }
 
 function gotoGame(level: LevelSpec): void {
+  pwaUpdates.enterRoute("game");
   showGame(root, {
     level,
     uiPrefs,
@@ -94,6 +104,7 @@ function gotoGame(level: LevelSpec): void {
       const next = LEVELS.find((l) => l.id === level.id + 1);
       const rec = result.won ? storage.recordWin(level.id, result.timeSec) : null;
       if (rec !== null) notePersisted(rec.persisted);
+      pwaUpdates.enterRoute("result");
       showResult({
         won: result.won,
         reason: result.reason,
@@ -112,6 +123,7 @@ function gotoGame(level: LevelSpec): void {
 }
 
 function gotoEndless(): void {
+  pwaUpdates.enterRoute("game");
   const streak = storage.load().endless.streak;
   const level = endlessSpec(streak, mulberry32((Math.random() * 2 ** 32) >>> 0));
   showGame(root, {
@@ -124,6 +136,7 @@ function gotoEndless(): void {
       if (result.won) {
         const rec = storage.recordEndlessWin();
         notePersisted(rec.persisted);
+        pwaUpdates.enterRoute("result");
         showResult({
           won: true,
           timeSec: result.timeSec,
@@ -141,6 +154,7 @@ function gotoEndless(): void {
         const ended = storage.load().endless.streak;
         const rec = storage.recordEndlessLoss();
         notePersisted(rec.persisted);
+        pwaUpdates.enterRoute("result");
         showResult({
           won: false,
           reason: result.reason,
@@ -168,8 +182,10 @@ gotoHome();
 
 // PWA:仅在 Web 环境(https 或本地预览)注册 Service Worker;Tauri 桌面端不需要
 if (
+  import.meta.env.PROD &&
   "serviceWorker" in navigator &&
-  (location.protocol === "https:" || location.hostname === "localhost")
+  (location.protocol === "https:" || location.hostname === "localhost" ||
+    location.hostname === "127.0.0.1")
 ) {
-  void import("virtual:pwa-register").then(({ registerSW }) => registerSW({ immediate: true }));
+  void connectPwaRegistration(pwaUpdates);
 }
