@@ -18,6 +18,8 @@
     "android:init": "tauri android init --ci",
     "android:build": "tauri android build --apk --target aarch64 armv7 x86_64 --ci",
     "android:build:debug": "tauri android build --debug --apk --target aarch64 --ci",
+    "android:release": "node scripts/android-release.mjs",
+    "android:verify": "node scripts/android-release.mjs --output-dir artifacts/android",
     "tauri": "tauri",
     "version:sync": "node scripts/version.mjs sync",
     "version:check": "node scripts/version.mjs check",
