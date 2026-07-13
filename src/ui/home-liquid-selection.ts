@@ -53,6 +53,7 @@ interface PointerSample {
 
 interface ActiveDrag {
   pointerId: number;
+  pressedTarget: HomeLiquidTarget | null;
   startX: number;
   startY: number;
   lastRenderedX: number;
@@ -64,7 +65,6 @@ interface ActiveDrag {
   frameId: number | null;
   frameKind: "animation" | "timer" | null;
   moved: boolean;
-  captureAttempted: boolean;
   captured: boolean;
 }
 
@@ -214,6 +214,7 @@ export function installHomeLiquidSelection(
   let activeAnimation: Animation | null = null;
   let activeDrag: ActiveDrag | null = null;
   let activeListenersInstalled = false;
+  let layoutObserver: ResizeObserver | null = null;
   let compatibilityClickSuppressed = false;
   let destroyed = false;
 
@@ -533,8 +534,7 @@ export function installHomeLiquidSelection(
   };
 
   const acquirePointerCapture = (session: ActiveDrag): void => {
-    if (activeDrag !== session || session.captureAttempted) return;
-    session.captureAttempted = true;
+    if (activeDrag !== session || session.captured) return;
     try {
       const setCapture = panel.setPointerCapture;
       if (typeof setCapture !== "function") return;
@@ -612,10 +612,8 @@ export function installHomeLiquidSelection(
     const session = activeDrag;
     if (!session || pointer.pointerId !== session.pointerId) return;
     updatePointerSample(session, pointer);
-    if (session.moved) {
-      event.preventDefault();
-      acquirePointerCapture(session);
-    }
+    event.preventDefault();
+    if (!session.moved) return;
     schedulePendingSample(session);
   }
 
@@ -627,10 +625,25 @@ export function installHomeLiquidSelection(
     flushPendingSample(session);
     const moved = session.moved;
     const candidate = session.candidate;
+    const pressedTarget = session.pressedTarget;
     clearDragSession(session);
     if (destroyed) return;
 
-    if (moved) suppressCompatibilityClicks();
+    if (!moved) {
+      moveIndicator(selectedTarget.button, true, DRAG_SETTLE_MS);
+      if (
+        pressedTarget
+        && pressedTarget === selectedTarget
+        && pressedTarget.button.isConnected
+        && !pressedTarget.button.disabled
+      ) {
+        suppressCompatibilityClicks();
+        pressedTarget.activate();
+      }
+      return;
+    }
+
+    suppressCompatibilityClicks();
     if (
       moved
       && candidate
@@ -669,6 +682,10 @@ export function installHomeLiquidSelection(
     cancelActiveDrag(true);
   }
 
+  function onNativeDragStart(event: Event): void {
+    if (activeDrag) event.preventDefault();
+  }
+
   function onPointerDown(event: Event): void {
     const pointer = event as PointerEvent;
     if (
@@ -691,6 +708,7 @@ export function installHomeLiquidSelection(
     const pointerId = Number.isFinite(pointer.pointerId) ? pointer.pointerId : 0;
     const session: ActiveDrag = {
       pointerId,
+      pressedTarget: selectedTarget.button.contains(source) ? selectedTarget : null,
       startX: pointer.clientX,
       startY: pointer.clientY,
       lastRenderedX: pointer.clientX,
@@ -702,13 +720,13 @@ export function installHomeLiquidSelection(
       frameId: null,
       frameKind: null,
       moved: false,
-      captureAttempted: false,
       captured: false,
     };
     activeDrag = session;
     panel.classList.add("is-home-liquid-dragging");
     clearCandidateClasses();
     installActiveListeners();
+    acquirePointerCapture(session);
     const box = measurePanelBox(panel);
     if (box) {
       writePanelOptics(pointer.clientX - box.left, pointer.clientY - box.top, box);
@@ -743,10 +761,29 @@ export function installHomeLiquidSelection(
     moveIndicator(selectedTarget.button, false);
   };
 
+  const ResizeObserverConstructor = ownerWindow.ResizeObserver as
+    | typeof ResizeObserver
+    | undefined;
+  if (typeof ResizeObserverConstructor === "function") {
+    try {
+      layoutObserver = new ResizeObserverConstructor(onResize);
+      layoutObserver.observe(panel);
+      for (const target of targets) layoutObserver.observe(target.button);
+    } catch {
+      try {
+        layoutObserver?.disconnect();
+      } catch {
+        // Window resize remains the guarded layout fallback.
+      }
+      layoutObserver = null;
+    }
+  }
+
   markSelected(initialTarget);
   moveIndicator(initialTarget.button, false);
   panel.addEventListener("click", onClick);
   panel.addEventListener("pointerdown", onPointerDown, true);
+  panel.addEventListener("dragstart", onNativeDragStart);
   panel.addEventListener("lostpointercapture", onLostPointerCapture);
   ownerWindow.addEventListener("resize", onResize);
 
@@ -769,8 +806,15 @@ export function installHomeLiquidSelection(
       destroyed = true;
       panel.removeEventListener("click", onClick);
       panel.removeEventListener("pointerdown", onPointerDown, true);
+      panel.removeEventListener("dragstart", onNativeDragStart);
       panel.removeEventListener("lostpointercapture", onLostPointerCapture);
       ownerWindow.removeEventListener("resize", onResize);
+      try {
+        layoutObserver?.disconnect();
+      } catch {
+        // A partial observer implementation must not block teardown.
+      }
+      layoutObserver = null;
       for (const target of targets) {
         target.button.classList.remove("is-home-selected", "is-home-candidate");
       }
