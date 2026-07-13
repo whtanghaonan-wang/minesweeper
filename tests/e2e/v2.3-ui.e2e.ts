@@ -193,7 +193,7 @@ test("首页、菜单和游戏无 serious/critical axe 问题", async ({ page })
     .toEqual([]);
 });
 
-test("强玻璃有标准/WebKit blur，手动降低透明度即时实色", async ({ page }) => {
+test("强玻璃有标准/WebKit blur 和蓝色选中态，手动降低透明度即时实色", async ({ page }) => {
   await page.goto("/");
   const panel = page.locator(".home-panel");
   const before = await panel.evaluate((element) => ({
@@ -209,11 +209,16 @@ test("强玻璃有标准/WebKit blur，手动降低透明度即时实色", async
   const playBefore = await play.evaluate((element) => ({
     color: getComputedStyle(element).color,
     image: getComputedStyle(element).backgroundImage,
+    selectedBlue: getComputedStyle(element.closest(".home-panel")!)
+      .getPropertyValue("--home-selected-blue").trim(),
   }));
-  expect(playBefore.color).toBe("rgb(255, 255, 255)");
-  expect(playBefore.image).toContain("linear-gradient");
+  await expect(play).toHaveClass(/is-home-selected/);
+  expect(playBefore.selectedBlue).toBe("#005fc7");
+  expect(playBefore.color).toBe("rgb(0, 95, 199)");
+  expect(playBefore.image).toBe("none");
 
-  await page.locator(".transparency-btn").click();
+  const transparency = page.locator(".transparency-btn");
+  await transparency.click();
   await expect(page.locator("html")).toHaveAttribute("data-reduced-transparency", "true");
   const after = await panel.evaluate((element) => ({
     backdrop: getComputedStyle(element).backdropFilter,
@@ -227,8 +232,9 @@ test("强玻璃有标准/WebKit blur，手动降低透明度即时实色", async
   expect(after.background).toBe("rgba(247, 248, 244, 0.96)");
   expect(after.beforeDisplay).toBe("none");
   expect(after.afterDisplay).toBe("none");
-  expect(await play.evaluate((element) => getComputedStyle(element).color))
-    .toBe("rgb(255, 255, 255)");
+  await expect(play).not.toHaveClass(/is-home-selected/);
+  await expect(transparency).toHaveClass(/is-home-selected/);
+  await expect(transparency).toHaveCSS("color", "rgb(0, 95, 199)");
 });
 
 test("同一视觉簇没有嵌套光学表面，棋盘没有 glass/filter", async ({ page }) => {
@@ -245,20 +251,31 @@ test("同一视觉簇没有嵌套光学表面，棋盘没有 glass/filter", asyn
     .toBe(true);
 });
 
-test("减少动态时没有弹性 transform 动画", async ({ page }) => {
+test("减少动态时键盘只激活一次且没有旧弹性 transform 状态", async ({ page }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto("/");
-  const play = page.locator(".home-play");
-  await play.evaluate((element) => {
-    element.dispatchEvent(new KeyboardEvent("keydown", { key: " ", bubbles: true }));
+  const sound = page.locator(".sound-btn");
+  const originalLabel = await sound.getAttribute("aria-label");
+  await sound.evaluate((element) => {
+    element.dataset["testKeyboardClickCount"] = "0";
+    element.addEventListener("click", () => {
+      const count = Number(element.dataset["testKeyboardClickCount"] ?? "0");
+      element.dataset["testKeyboardClickCount"] = String(count + 1);
+    });
   });
-  await expect(play).toHaveClass(/is-glass-pressed/);
-  await play.evaluate((element) => {
-    element.dispatchEvent(new KeyboardEvent("keyup", { key: " ", bubbles: true }));
-  });
-  await page.evaluate(() => new Promise<void>((resolve) => setTimeout(resolve, 0)));
-  await expect(play).not.toHaveClass(/is-glass-pressed/);
-  await expect(play).not.toHaveClass(/is-glass-releasing/);
-  const transform = await play.evaluate((element) => getComputedStyle(element).transform);
+  await sound.focus();
+  await sound.press("Space");
+
+  await expect(sound).toHaveAttribute("data-test-keyboard-click-count", "1");
+  await expect(sound).not.toHaveAttribute("aria-label", originalLabel!);
+  await expect(sound).toHaveClass(/is-home-selected/);
+  await expect(page.locator(".home-liquid-selection")).toBeVisible();
+  await expect(page.locator(
+    ".home-liquid-target[data-jelly], " +
+    ".home-liquid-target.is-glass-pressed, " +
+    ".home-liquid-target.is-glass-releasing",
+  )).toHaveCount(0);
+
+  const transform = await sound.evaluate((element) => getComputedStyle(element).transform);
   expect(transform === "none" || transform === "matrix(1, 0, 0, 1, 0, 0)").toBe(true);
 });
