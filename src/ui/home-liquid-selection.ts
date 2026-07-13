@@ -64,6 +64,8 @@ interface ActiveDrag {
   frameId: number | null;
   frameKind: "animation" | "timer" | null;
   moved: boolean;
+  captureAttempted: boolean;
+  captured: boolean;
 }
 
 interface MagneticTarget {
@@ -530,12 +532,33 @@ export function installHomeLiquidSelection(
     };
   };
 
-  const releasePointerCapture = (pointerId: number): void => {
+  const acquirePointerCapture = (session: ActiveDrag): void => {
+    if (activeDrag !== session || session.captureAttempted) return;
+    session.captureAttempted = true;
+    try {
+      const setCapture = panel.setPointerCapture;
+      if (typeof setCapture !== "function") return;
+      setCapture.call(panel, session.pointerId);
+      if (activeDrag === session) session.captured = true;
+    } catch {
+      session.captured = false;
+      // Window-level listeners keep the drag recoverable without capture.
+    }
+  };
+
+  const releasePointerCapture = (session: ActiveDrag): void => {
+    if (!session.captured) return;
+    session.captured = false;
     try {
       const hasCapture = panel.hasPointerCapture;
-      if (typeof hasCapture === "function" && !hasCapture.call(panel, pointerId)) return;
+      if (
+        typeof hasCapture === "function"
+        && !hasCapture.call(panel, session.pointerId)
+      ) return;
       const releaseCapture = panel.releasePointerCapture;
-      if (typeof releaseCapture === "function") releaseCapture.call(panel, pointerId);
+      if (typeof releaseCapture === "function") {
+        releaseCapture.call(panel, session.pointerId);
+      }
     } catch {
       // Capture is an optimization; window end listeners are the fallback.
     }
@@ -572,7 +595,7 @@ export function installHomeLiquidSelection(
     clearCandidateClasses();
     panel.classList.remove("is-home-liquid-dragging");
     removeActiveListeners();
-    releasePointerCapture(session.pointerId);
+    releasePointerCapture(session);
   };
 
   const cancelActiveDrag = (snapBack: boolean, animate = true): void => {
@@ -588,8 +611,11 @@ export function installHomeLiquidSelection(
     const pointer = event as PointerEvent;
     const session = activeDrag;
     if (!session || pointer.pointerId !== session.pointerId) return;
-    event.preventDefault();
     updatePointerSample(session, pointer);
+    if (session.moved) {
+      event.preventDefault();
+      acquirePointerCapture(session);
+    }
     schedulePendingSample(session);
   }
 
@@ -636,7 +662,9 @@ export function installHomeLiquidSelection(
 
   function onLostPointerCapture(event: Event): void {
     const pointer = event as PointerEvent;
-    if (!activeDrag || pointer.pointerId !== activeDrag.pointerId) return;
+    const session = activeDrag;
+    if (!session || pointer.pointerId !== session.pointerId) return;
+    session.captured = false;
     cancelActiveDrag(true);
   }
 
@@ -673,6 +701,8 @@ export function installHomeLiquidSelection(
       frameId: null,
       frameKind: null,
       moved: false,
+      captureAttempted: false,
+      captured: false,
     };
     activeDrag = session;
     panel.classList.add("is-home-liquid-dragging");
@@ -682,13 +712,6 @@ export function installHomeLiquidSelection(
     if (box) {
       writePanelOptics(pointer.clientX - box.left, pointer.clientY - box.top, box);
     }
-    try {
-      const setCapture = panel.setPointerCapture;
-      if (typeof setCapture === "function") setCapture.call(panel, pointerId);
-    } catch {
-      // Window-level end listeners keep the session recoverable without capture.
-    }
-    event.preventDefault();
   }
 
   const onClick = (event: Event): void => {

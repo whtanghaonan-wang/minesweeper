@@ -714,6 +714,14 @@ describe("installHomeLiquidSelection", () => {
 
   it("recovers from pointer 41 losing capture before pointer 42 drags successfully", () => {
     const fixture = createFixture();
+    const setPointerCapture = vi.fn();
+    const hasPointerCapture = vi.fn(() => true);
+    const releasePointerCapture = vi.fn();
+    Object.defineProperties(fixture.panel, {
+      setPointerCapture: { configurable: true, value: setPointerCapture },
+      hasPointerCapture: { configurable: true, value: hasPointerCapture },
+      releasePointerCapture: { configurable: true, value: releasePointerCapture },
+    });
     const controller = installHomeLiquidSelection(
       fixture.panel,
       fixture.indicator,
@@ -726,15 +734,19 @@ describe("installHomeLiquidSelection", () => {
       clientX: 155,
       clientY: 100,
     });
+    expect(setPointerCapture).not.toHaveBeenCalled();
     dispatchPointer(window, "pointermove", {
       pointerId: 41,
       clientX: 267,
       clientY: 164,
     });
+    expect(setPointerCapture).toHaveBeenCalledTimes(1);
+    expect(setPointerCapture).toHaveBeenLastCalledWith(41);
     dispatchPointer(fixture.panel, "lostpointercapture", { pointerId: 41 });
 
     expect(fixture.indicator.style.left).toBe("145px");
     expect(fixture.indicator.style.top).toBe("80px");
+    expect(releasePointerCapture).not.toHaveBeenCalled();
     dispatchPointer(fixture.indicator, "pointerdown", {
       pointerId: 42,
       clientX: 155,
@@ -745,17 +757,193 @@ describe("installHomeLiquidSelection", () => {
       clientX: 90,
       clientY: 164,
     });
+    expect(setPointerCapture).toHaveBeenCalledTimes(2);
+    expect(setPointerCapture).toHaveBeenLastCalledWith(42);
     dispatchPointer(window, "pointerup", {
       pointerId: 42,
       clientX: 90,
       clientY: 164,
     });
+    expect(releasePointerCapture).toHaveBeenCalledTimes(1);
+    expect(releasePointerCapture).toHaveBeenCalledWith(42);
     vi.advanceTimersByTime(220);
 
     expect(fixture.select.classList.contains("is-home-selected")).toBe(true);
     expect(fixture.selectActivate).toHaveBeenCalledTimes(1);
     expect(fixture.playActivate).not.toHaveBeenCalled();
     expect(fixture.soundActivate).not.toHaveBeenCalled();
+    controller.destroy();
+  });
+
+  it("keeps a sub-threshold Play press uncaptured and lets its normal click activate", () => {
+    const fixture = createFixture();
+    const setPointerCapture = vi.fn();
+    const hasPointerCapture = vi.fn(() => true);
+    const releasePointerCapture = vi.fn();
+    Object.defineProperties(fixture.panel, {
+      setPointerCapture: { configurable: true, value: setPointerCapture },
+      hasPointerCapture: { configurable: true, value: hasPointerCapture },
+      releasePointerCapture: { configurable: true, value: releasePointerCapture },
+    });
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+
+    const pointerDown = dispatchPointer(fixture.play, "pointerdown", {
+      pointerId: 43,
+      clientX: 155,
+      clientY: 100,
+    });
+    const pointerMove = dispatchPointer(fixture.play, "pointermove", {
+      pointerId: 43,
+      clientX: 159,
+      clientY: 100,
+    });
+    dispatchPointer(fixture.play, "pointerup", {
+      pointerId: 43,
+      clientX: 159,
+      clientY: 100,
+    });
+    fixture.play.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+
+    expect(pointerDown.defaultPrevented).toBe(false);
+    expect(pointerMove.defaultPrevented).toBe(false);
+    expect(setPointerCapture).not.toHaveBeenCalled();
+    expect(hasPointerCapture).not.toHaveBeenCalled();
+    expect(releasePointerCapture).not.toHaveBeenCalled();
+    expect(fixture.playActivate).toHaveBeenCalledTimes(1);
+    controller.destroy();
+  });
+
+  it("lets an already-selected instant button be clicked repeatedly without capture", () => {
+    const fixture = createFixture();
+    const setPointerCapture = vi.fn();
+    Object.defineProperty(fixture.panel, "setPointerCapture", {
+      configurable: true,
+      value: setPointerCapture,
+    });
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.sound,
+    );
+
+    for (const pointerId of [44, 45]) {
+      dispatchPointer(fixture.sound, "pointerdown", {
+        pointerId,
+        clientX: 267,
+        clientY: 164,
+      });
+      dispatchPointer(fixture.sound, "pointerup", {
+        pointerId,
+        clientX: 267,
+        clientY: 164,
+      });
+      fixture.sound.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+    }
+
+    expect(setPointerCapture).not.toHaveBeenCalled();
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(2);
+    controller.destroy();
+  });
+
+  it("requests capture once only after movement crosses the drag threshold", () => {
+    const fixture = createFixture();
+    const setPointerCapture = vi.fn();
+    const hasPointerCapture = vi.fn(() => true);
+    const releasePointerCapture = vi.fn();
+    Object.defineProperties(fixture.panel, {
+      setPointerCapture: { configurable: true, value: setPointerCapture },
+      hasPointerCapture: { configurable: true, value: hasPointerCapture },
+      releasePointerCapture: { configurable: true, value: releasePointerCapture },
+    });
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+
+    dispatchPointer(fixture.play, "pointerdown", {
+      pointerId: 46,
+      clientX: 155,
+      clientY: 100,
+    });
+    expect(setPointerCapture).not.toHaveBeenCalled();
+    const smallMove = dispatchPointer(fixture.play, "pointermove", {
+      pointerId: 46,
+      clientX: 159,
+      clientY: 100,
+    });
+    expect(smallMove.defaultPrevented).toBe(false);
+    expect(setPointerCapture).not.toHaveBeenCalled();
+
+    const dragMove = dispatchPointer(window, "pointermove", {
+      pointerId: 46,
+      clientX: 165,
+      clientY: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 46,
+      clientX: 180,
+      clientY: 100,
+    });
+    expect(dragMove.defaultPrevented).toBe(true);
+    expect(setPointerCapture).toHaveBeenCalledTimes(1);
+    expect(setPointerCapture).toHaveBeenCalledWith(46);
+
+    dispatchPointer(window, "pointerup", {
+      pointerId: 46,
+      clientX: 180,
+      clientY: 100,
+    });
+    expect(hasPointerCapture).toHaveBeenCalledWith(46);
+    expect(releasePointerCapture).toHaveBeenCalledTimes(1);
+    expect(releasePointerCapture).toHaveBeenCalledWith(46);
+    controller.destroy();
+  });
+
+  it("recovers through window listeners when deferred pointer capture throws", () => {
+    const fixture = createFixture();
+    const setPointerCapture = vi.fn(() => {
+      throw new Error("capture unavailable");
+    });
+    const releasePointerCapture = vi.fn();
+    Object.defineProperties(fixture.panel, {
+      setPointerCapture: { configurable: true, value: setPointerCapture },
+      releasePointerCapture: { configurable: true, value: releasePointerCapture },
+    });
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+
+    dispatchPointer(fixture.play, "pointerdown", {
+      pointerId: 47,
+      clientX: 155,
+      clientY: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 47,
+      clientX: 267,
+      clientY: 164,
+    });
+    dispatchPointer(window, "pointerup", {
+      pointerId: 47,
+      clientX: 267,
+      clientY: 164,
+    });
+
+    expect(setPointerCapture).toHaveBeenCalledTimes(1);
+    expect(releasePointerCapture).not.toHaveBeenCalled();
+    expect(fixture.sound.classList.contains("is-home-selected")).toBe(true);
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(1);
     controller.destroy();
   });
 
@@ -926,6 +1114,12 @@ describe("installHomeLiquidSelection", () => {
     dispatchPointer(fixture.play, "pointerdown", {
       pointerId: 4,
       clientX: 155,
+      clientY: 100,
+    });
+    expect(setPointerCapture).not.toHaveBeenCalled();
+    dispatchPointer(window, "pointermove", {
+      pointerId: 4,
+      clientX: 165,
       clientY: 100,
     });
     expect(setPointerCapture).toHaveBeenCalledTimes(1);
