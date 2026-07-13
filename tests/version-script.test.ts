@@ -93,10 +93,33 @@ describe("version.mjs", () => {
     expect(run().status).toBe(0);
   });
 
-  it.each(["02.4.0", "2.1000.0", "2.4.1000"])("拒绝会造成 Android versionCode 歧义的版本 %s", (version) => {
+  it.each(["02.4.0", "2.04.0", "2.4.00", "2.1000.0", "2.4.1000"])("拒绝会造成 Android versionCode 歧义的版本 %s", (version) => {
     writeJson("package.json", { name: "minesweeper", version });
     const result = run();
     expect(result.status).toBe(1);
     expect(result.stderr).toContain("Android versionCode requires canonical x.y.z version");
+  });
+
+  it.each(["0.0.0", "2100.0.1"])("拒绝超出 Android versionCode 范围的版本 %s", (version) => {
+    writeJson("package.json", { name: "minesweeper", version });
+    const result = run();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Android versionCode out of range");
+  });
+
+  it("允许 Android versionCode 的最大值", () => {
+    const version = "2100.0.0";
+    writeJson("package.json", { name: "minesweeper", version });
+    writeJson("package-lock.json", {
+      name: "minesweeper", version,
+      lockfileVersion: 3, packages: { "": { name: "minesweeper", version } },
+    });
+    writeJson("src-tauri/tauri.conf.json", { version });
+    writeJson("src-tauri/tauri.android.conf.json", {
+      bundle: { android: { minSdkVersion: 24, versionCode: 2_100_000_000, autoIncrementVersionCode: false } },
+    });
+    writeFileSync(resolve(root, "src-tauri/Cargo.toml"),
+      `[package]\nname = "minesweeper"\nversion = "${version}"\nedition = "2021"\n`);
+    expect(run().status).toBe(0);
   });
 });
