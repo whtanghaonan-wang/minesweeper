@@ -2,7 +2,7 @@ import "./ui/style.css";
 import { createStorage } from "./core/storage";
 import { LEVELS, type LevelSpec } from "./core/levels";
 import { setMuted } from "./ui/audio";
-import { showHome } from "./ui/home";
+import { showHome, type HomeViewController } from "./ui/home";
 import { showMenu } from "./ui/menu";
 import { showGame } from "./ui/game";
 import { showResult } from "./ui/result";
@@ -38,9 +38,19 @@ const storage = createStorage(backend);
 const uiPrefs = createUiPrefs(backend);
 applyReducedTransparency(uiPrefs.load().reducedTransparency);
 const liquidGlass = installLiquidGlass(document);
+let homeView: HomeViewController | null = null;
+
+function leaveHome(): void {
+  homeView?.destroy();
+  homeView = null;
+}
+
 window.addEventListener("pagehide", (event) => {
   if (event.persisted) liquidGlass.cancelAll();
-  else liquidGlass.destroy();
+  else {
+    leaveHome();
+    liquidGlass.destroy();
+  }
 });
 let persistenceWarning = backend === undefined;
 
@@ -69,9 +79,10 @@ function retryPending(): void {
 setMuted(!storage.load().soundOn);
 
 function gotoHome(): void {
+  leaveHome();
   pwaUpdates.enterRoute("home");
   retryPending();
-  showHome(root, {
+  homeView = showHome(root, {
     storage,
     uiPrefs,
     version: APP_VERSION,
@@ -83,6 +94,7 @@ function gotoHome(): void {
 }
 
 function gotoMenu(): void {
+  leaveHome();
   pwaUpdates.enterRoute("menu");
   retryPending();
   showMenu(root, {
@@ -94,6 +106,7 @@ function gotoMenu(): void {
 }
 
 function gotoGame(level: LevelSpec): void {
+  leaveHome();
   pwaUpdates.enterRoute("game");
   showGame(root, {
     level,
@@ -123,6 +136,7 @@ function gotoGame(level: LevelSpec): void {
 }
 
 function gotoEndless(): void {
+  leaveHome();
   pwaUpdates.enterRoute("game");
   const streak = storage.load().endless.streak;
   const level = endlessSpec(streak, mulberry32((Math.random() * 2 ** 32) >>> 0));

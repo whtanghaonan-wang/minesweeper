@@ -3,6 +3,11 @@ import type { GameStorage } from "../core/storage";
 import { setMuted } from "./audio";
 import { fmtTime } from "./format";
 import {
+  installHomeLiquidSelection,
+  type HomeLiquidSelectionController,
+  type HomeLiquidTarget,
+} from "./home-liquid-selection";
+import {
   applyReducedTransparency,
   type UiPrefsStore,
 } from "./ui-prefs";
@@ -17,11 +22,15 @@ export interface HomeDeps {
   onPersisted?(persisted: boolean): void;
 }
 
+export interface HomeViewController {
+  destroy(): void;
+}
+
 const SVG_NS = "http://www.w3.org/2000/svg";
 const MAX = LEVELS.length;
 
 /** 游戏首界面:藤蔓延伸式(v2.1 设计文档 §4) */
-export function showHome(root: HTMLElement, deps: HomeDeps): void {
+export function showHome(root: HTMLElement, deps: HomeDeps): HomeViewController {
   const save = deps.storage.load();
   const done = LEVELS.filter(
     (l) => save.bestTimes[l.id] !== undefined || l.id < save.unlockedLevel,
@@ -63,20 +72,19 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
   const soundBtn = document.createElement("button");
   soundBtn.type = "button";
   soundBtn.className = "sound-btn";
-  soundBtn.dataset["jelly"] = "";
   let on = save.soundOn;
   const syncSound = (): void => {
     soundBtn.textContent = on ? "🔊" : "🔇";
     soundBtn.setAttribute("aria-label", on ? "关闭音效" : "开启音效");
   };
   syncSound();
-  soundBtn.addEventListener("click", () => {
+  const toggleSound = (): void => {
     on = !on;
     setMuted(!on);
     const persisted = deps.storage.setSoundOn(on);
     deps.onPersisted?.(persisted);
     syncSound();
-  });
+  };
   stats.append(doneStat, bestStat);
   if (save.endless.bestStreak > 0) {
     const streakStat = document.createElement("span");
@@ -86,7 +94,6 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
   const transparencyBtn = document.createElement("button");
   transparencyBtn.type = "button";
   transparencyBtn.className = "transparency-btn";
-  transparencyBtn.dataset["jelly"] = "";
   let reduced = deps.uiPrefs.load().reducedTransparency;
   const syncTransparency = (): void => {
     transparencyBtn.textContent = reduced ? "◼ 实色" : "◫ 玻璃";
@@ -94,11 +101,11 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
     transparencyBtn.setAttribute("aria-pressed", String(reduced));
     applyReducedTransparency(reduced);
   };
-  transparencyBtn.addEventListener("click", () => {
+  const toggleTransparency = (): void => {
     reduced = !reduced;
     deps.uiPrefs.setReducedTransparency(reduced);
     syncTransparency();
-  });
+  };
   syncTransparency();
   const tools = document.createElement("div");
   tools.className = "home-tools";
@@ -114,22 +121,16 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
   const playBtn = document.createElement("button");
   playBtn.type = "button";
   playBtn.className = "home-play";
-  playBtn.dataset["jelly"] = "";
   playBtn.textContent = `▶ ${primaryLabel}`;
-  playBtn.addEventListener("click", () => deps.onContinue(target));
   const selBtn = document.createElement("button");
   selBtn.type = "button";
   selBtn.className = "home-select";
-  selBtn.dataset["jelly"] = "";
   selBtn.textContent = "🌿 选关";
-  selBtn.addEventListener("click", () => deps.onSelect());
   const endlessBtn = document.createElement("button");
   endlessBtn.type = "button";
   endlessBtn.className = "home-endless";
-  endlessBtn.dataset["jelly"] = "";
   if (cleared) {
     endlessBtn.textContent = "♾ 无尽";
-    endlessBtn.addEventListener("click", () => deps.onEndless());
   } else {
     endlessBtn.disabled = true;
     endlessBtn.classList.add("locked");
@@ -143,10 +144,33 @@ export function showHome(root: HTMLElement, deps: HomeDeps): void {
   ver.className = "home-ver num";
   ver.textContent = `v${deps.version}`;
 
-  panel.append(stats, barWrap, playBtn, secondaryActions, tools);
+  const indicator = document.createElement("div");
+  indicator.className = "home-liquid-selection";
+  indicator.setAttribute("aria-hidden", "true");
+
+  for (const button of [playBtn, selBtn, endlessBtn, soundBtn, transparencyBtn]) {
+    button.classList.add("home-liquid-target");
+  }
+
+  panel.append(indicator, stats, barWrap, playBtn, secondaryActions, tools);
   home.append(hero, panel, ver);
   root.replaceChildren(home);
+
+  const targets: HomeLiquidTarget[] = [
+    { button: playBtn, kind: "navigation", activate: () => deps.onContinue(target) },
+    { button: selBtn, kind: "navigation", activate: deps.onSelect },
+    { button: endlessBtn, kind: "navigation", activate: deps.onEndless },
+    { button: soundBtn, kind: "instant", activate: toggleSound },
+    { button: transparencyBtn, kind: "instant", activate: toggleTransparency },
+  ];
+  const liquidSelection: HomeLiquidSelectionController = installHomeLiquidSelection(
+    panel,
+    indicator,
+    targets,
+    playBtn,
+  );
   title.focus();
+  return { destroy: () => liquidSelection.destroy() };
 }
 
 /** 装饰藤蔓:自顶垂落,CSS 驱动生长动画(prefers-reduced-motion 时静态) */

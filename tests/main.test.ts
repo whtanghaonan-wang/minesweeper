@@ -26,6 +26,7 @@ const h = vi.hoisted(() => ({
   } satisfies GameStorage,
   createStorage: vi.fn(),
   showHome: vi.fn(),
+  destroyHomeView: vi.fn(),
   showMenu: vi.fn(),
   showGame: vi.fn(),
   showResult: vi.fn(),
@@ -65,6 +66,7 @@ vi.mock("../src/ui/home", () => ({
   showHome: (root: HTMLElement, deps: HomeDeps) => {
     h.home = deps;
     h.showHome(root, deps);
+    return { destroy: h.destroyHomeView };
   },
 }));
 vi.mock("../src/ui/menu", () => ({
@@ -138,6 +140,7 @@ beforeEach(() => {
   h.storage.recordEndlessLoss.mockReset();
   h.createStorage.mockReset();
   h.showHome.mockReset();
+  h.destroyHomeView.mockReset();
   h.showMenu.mockReset();
   h.showGame.mockReset();
   h.showResult.mockReset();
@@ -254,11 +257,16 @@ describe("应用壳持久化可靠性", () => {
 
     expect(h.cancelAllLiquidGlass).toHaveBeenCalledTimes(1);
     expect(h.destroyLiquidGlass).not.toHaveBeenCalled();
+    expect(h.destroyHomeView).not.toHaveBeenCalled();
 
     const leaving = Object.assign(new Event("pagehide"), { persisted: false }) as PageTransitionEvent;
     h.pagehideHandler!(leaving);
 
+    expect(h.destroyHomeView).toHaveBeenCalledTimes(1);
     expect(h.destroyLiquidGlass).toHaveBeenCalledTimes(1);
+    expect(h.destroyHomeView.mock.invocationCallOrder[0]).toBeLessThan(
+      h.destroyLiquidGlass.mock.invocationCallOrder[0]!,
+    );
   });
 
   it("pagehide 监听器保持可复用而不是 once", async () => {
@@ -304,6 +312,26 @@ describe("应用壳持久化可靠性", () => {
     h.home!.onSelect();
     expect(h.storage.flushPending).toHaveBeenCalledTimes(2);
     expect(h.showMenu).toHaveBeenCalledTimes(1);
+  });
+
+  it("每个首页实例在离开路由前恰好销毁一次", async () => {
+    await boot();
+
+    h.home!.onSelect();
+    expect(h.destroyHomeView).toHaveBeenCalledTimes(1);
+    expect(h.destroyHomeView.mock.invocationCallOrder[0]).toBeLessThan(
+      h.showMenu.mock.invocationCallOrder[0]!,
+    );
+
+    h.menu!.onBack();
+    expect(h.showHome).toHaveBeenCalledTimes(2);
+    expect(h.destroyHomeView).toHaveBeenCalledTimes(1);
+
+    h.home!.onContinue(campaignLevel);
+    expect(h.destroyHomeView).toHaveBeenCalledTimes(2);
+    expect(h.destroyHomeView.mock.invocationCallOrder[1]).toBeLessThan(
+      h.showGame.mock.invocationCallOrder[0]!,
+    );
   });
 
   it("无尽胜利传播失败状态和新连胜", async () => {

@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LEVELS, type LevelSpec } from "../src/core/levels";
 import { createStorage } from "../src/core/storage";
-import { showHome } from "../src/ui/home";
+import { showHome, type HomeViewController } from "../src/ui/home";
 import { setMuted } from "../src/ui/audio";
 import { createUiPrefs } from "../src/ui/ui-prefs";
 
@@ -17,11 +17,15 @@ function memBackend() {
 }
 
 let root: HTMLElement;
+let homeViews: HomeViewController[];
 beforeEach(() => {
   root = document.createElement("div");
   document.body.appendChild(root);
+  homeViews = [];
 });
 afterEach(() => {
+  for (const view of homeViews.reverse()) view.destroy();
+  vi.useRealTimers();
   document.body.innerHTML = "";
   delete document.documentElement.dataset["reducedTransparency"];
   vi.clearAllMocks();
@@ -31,7 +35,7 @@ function show(storage = createStorage(memBackend()), over: Partial<Parameters<ty
   const played: LevelSpec[] = [];
   let selected = 0;
   let endless = 0;
-  showHome(root, {
+  const view = showHome(root, {
     storage,
     uiPrefs: createUiPrefs(memBackend()),
     version: "9.9.9-test",
@@ -40,7 +44,14 @@ function show(storage = createStorage(memBackend()), over: Partial<Parameters<ty
     onEndless: () => endless++,
     ...over,
   });
-  return { played, get selected() { return selected; }, get endless() { return endless; }, storage };
+  homeViews.push(view);
+  return {
+    played,
+    get selected() { return selected; },
+    get endless() { return endless; },
+    storage,
+    view,
+  };
 }
 
 describe("首页", () => {
@@ -48,6 +59,7 @@ describe("首页", () => {
     show();
     const panel = root.querySelector<HTMLElement>(".home-panel")!;
     expect(Array.from(panel.children, (child) => child.classList[0])).toEqual([
+      "home-liquid-selection",
       "home-stats",
       "home-bar",
       "home-play",
@@ -86,19 +98,18 @@ describe("首页", () => {
     expect(root.querySelector(".home > .home-ver")?.textContent).toBe("v9.9.9-test");
   });
 
-  it("首页底部面板是唯一玻璃面,内部按钮只 jelly 不嵌套光学表面", () => {
+  it("首页底部面板是唯一玻璃面且液化选中体默认包裹主操作", () => {
     show();
     const panel = root.querySelector<HTMLElement>(".home-panel")!;
     expect(panel.hasAttribute("data-liquid-glass")).toBe(true);
     expect(panel.classList.contains("glass-clear")).toBe(true);
+    const lobe = panel.querySelector<HTMLElement>(":scope > .home-liquid-selection")!;
+    expect(lobe.getAttribute("aria-hidden")).toBe("true");
     expect(root.querySelectorAll("[data-liquid-glass]")).toHaveLength(1);
-    for (const selector of [".home-play", ".home-select", ".home-endless",
-      ".sound-btn", ".transparency-btn"]) {
-      const button = root.querySelector<HTMLButtonElement>(selector)!;
-      expect(button.hasAttribute("data-liquid-glass"), selector).toBe(false);
-      expect(button.hasAttribute("data-jelly"), selector).toBe(true);
-      expect(panel.contains(button), selector).toBe(true);
-    }
+    expect(root.querySelectorAll(".home-liquid-target")).toHaveLength(5);
+    expect(root.querySelectorAll(".home-liquid-target[data-jelly]")).toHaveLength(0);
+    expect(root.querySelectorAll(".home-liquid-target[data-liquid-glass]")).toHaveLength(0);
+    expect(root.querySelector(".home-play")?.classList.contains("is-home-selected")).toBe(true);
   });
 
   it("降低透明度按钮同步 aria-pressed、DOM 与独立偏好", () => {
@@ -179,8 +190,11 @@ describe("首页", () => {
   });
 
   it("选关按钮触发 onSelect", () => {
+    vi.useFakeTimers();
     const t = show();
     (root.querySelector(".home-select") as HTMLButtonElement).click();
+    expect(t.selected).toBe(0);
+    vi.advanceTimersByTime(220);
     expect(t.selected).toBe(1);
   });
 
@@ -233,12 +247,15 @@ describe("首页", () => {
   });
 
   it("无尽入口:通关 50 关后可点,触发 onEndless", () => {
+    vi.useFakeTimers();
     const storage = createStorage(memBackend());
     for (const l of LEVELS) storage.recordWin(l.id, 100);
     const t = show(storage);
     const btn = root.querySelector<HTMLButtonElement>(".home-endless")!;
     expect(btn.disabled).toBe(false);
     btn.click();
+    expect(t.endless).toBe(0);
+    vi.advanceTimersByTime(220);
     expect(t.endless).toBe(1);
   });
 
