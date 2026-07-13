@@ -32,16 +32,22 @@ function contrast(a: Rgb, b: Rgb): number {
   return (high! + 0.05) / (low! + 0.05);
 }
 
+function selectorPattern(selector: string): string {
+  return selector.trim().split(/\s+/).map((part) =>
+    part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+  ).join("\\s+");
+}
+
 function declarations(source: string, selector: string): string {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const match = source.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`));
+  const match = source.match(new RegExp(`${selectorPattern(selector)}\\s*\\{([^}]*)\\}`));
   if (!match) throw new Error(`missing CSS selector ${selector}`);
   return match[1]!;
 }
 
 function declarationsWithProperty(source: string, selector: string, property: string): string {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const matches = [...source.matchAll(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`, "g"))];
+  const matches = [
+    ...source.matchAll(new RegExp(`${selectorPattern(selector)}\\s*\\{([^}]*)\\}`, "g")),
+  ];
   const propertyPattern = new RegExp(`(?:^|;)\\s*${property}\\s*:`);
   const block = matches.map((match) => match[1]!).find((candidate) => propertyPattern.test(candidate));
   if (!block) throw new Error(`missing CSS property ${property} on ${selector}`);
@@ -49,8 +55,7 @@ function declarationsWithProperty(source: string, selector: string, property: st
 }
 
 function optionalDeclarations(source: string, selector: string): string {
-  const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return source.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+  return source.match(new RegExp(`${selectorPattern(selector)}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
 }
 
 function blockBodies(source: string, marker: string): string[] {
@@ -183,6 +188,103 @@ describe("Liquid Glass 静态约束", () => {
     expect(style).toContain("#005fc7");
     expect(style).toContain("html[data-reduced-transparency] .home-liquid-selection");
     expect(style).toContain("@media (forced-colors: active)");
+  });
+  it("首页液化选中体使用无粉色的白绿青浅紫同材质", () => {
+    const panel = declarations(style, ".home-panel");
+    const lobe = declarations(style, ".home-liquid-selection");
+    const highlight = declarations(style, ".home-liquid-selection::after");
+    expect(lobe).toContain("rgba(255, 255, 255, 0.72)");
+    expect(lobe).toContain("rgba(115, 226, 196, 0.16)");
+    expect(lobe).toContain("rgba(83, 205, 221, 0.14)");
+    expect(lobe).toContain("rgba(154, 164, 255, 0.13)");
+    expect(lobe).toContain(
+      "linear-gradient(135deg, rgba(238, 245, 240, 0.84), rgba(211, 223, 214, 0.68))",
+    );
+    expect(highlight).toContain("border-radius: inherit");
+    expect(highlight).toContain("rgba(255, 255, 255, 0.52)");
+    expect(highlight).toContain("pointer-events: none");
+
+    const fallbackBlocks = [
+      declarations(style, "html[data-reduced-transparency] .home-liquid-selection"),
+      declarationsInBlock(
+        style,
+        "@media (prefers-reduced-transparency: reduce), (prefers-contrast: more)",
+        ".home-liquid-selection",
+      ),
+      declarationsInBlock(style, "@media (forced-colors: active)", ".home-liquid-selection"),
+    ];
+    const relevantMaterial = [panel, lobe, highlight, ...fallbackBlocks].join("\n");
+    expect(relevantMaterial).not.toMatch(/rgba\(\s*255\s*,\s*171\s*,\s*210\b/i);
+    expect(relevantMaterial).not.toMatch(/\b(?:pink|magenta)\b/i);
+  });
+  it("液化选中体与目标的层级、拖拽命中和颜色状态完整", () => {
+    const panel = declarations(style, ".home-panel");
+    const lobe = declarations(style, ".home-liquid-selection");
+    const target = declarations(style, ".home-liquid-target");
+    expect(panel).toContain("--home-selected-blue: #005fc7");
+    expect(lobe).toContain("z-index: 1");
+    expect(lobe).toContain("pointer-events: auto");
+    expect(lobe).toContain("cursor: grab");
+    expect(target).toContain("z-index: 3");
+
+    const activeTargets = declarations(
+      style,
+      ".home-liquid-target.is-home-selected,\n.home-liquid-target.is-home-candidate",
+    );
+    expect(activeTargets).toContain("color: var(--home-selected-blue)");
+    const touchTargets = declarations(
+      style,
+      ".home-liquid-target.is-home-selected,\n.home-liquid-selection,\n.is-home-liquid-dragging",
+    );
+    expect(touchTargets).toContain("touch-action: none");
+    expect(declarations(style, ".is-home-liquid-dragging .home-liquid-selection"))
+      .toContain("cursor: grabbing");
+    expect(declarations(style, ".home-secondary-actions,\n.home-tools"))
+      .toContain("pointer-events: none");
+    expect(declarations(style, ".home-secondary-actions > button,\n.home-tools > button"))
+      .toContain("pointer-events: auto");
+  });
+  it("液化选中体在实色、高对比、减少动态和 forced colors 下完整降级", () => {
+    const solid = declarations(
+      style,
+      "html[data-reduced-transparency] .home-liquid-selection",
+    );
+    expect(solid).toContain("background: #d7e2d9");
+    expect(solid).toContain("backdrop-filter: none");
+    expect(solid).toContain("-webkit-backdrop-filter: none");
+
+    const contrast = declarationsInBlock(
+      style,
+      "@media (prefers-reduced-transparency: reduce), (prefers-contrast: more)",
+      ".home-liquid-selection",
+    );
+    expect(contrast).toContain("background: #d7e2d9");
+    expect(contrast).toContain("backdrop-filter: none");
+    expect(contrast).toContain("-webkit-backdrop-filter: none");
+
+    const reducedMotion = declarationsInBlock(
+      style,
+      "@media (prefers-reduced-motion: reduce)",
+      ".home-liquid-target",
+    );
+    expect(reducedMotion).toContain("transition-duration: 0ms");
+
+    const forcedLobe = declarationsInBlock(
+      style,
+      "@media (forced-colors: active)",
+      ".home-liquid-selection",
+    );
+    expect(forcedLobe).toContain("background: Highlight");
+    expect(forcedLobe).toContain("border: 1px solid Highlight");
+    expect(forcedLobe).toContain("box-shadow: none");
+    expect(forcedLobe).toContain("backdrop-filter: none");
+    expect(forcedLobe).toContain("-webkit-backdrop-filter: none");
+    const forcedTargets = declarationsInBlock(
+      style,
+      "@media (forced-colors: active)",
+      ".home-liquid-target.is-home-selected,\n.home-liquid-target.is-home-candidate",
+    );
+    expect(forcedTargets).toContain("color: HighlightText");
   });
   it("v2.4 首页在桌面和中间宽度保持横向胶囊，窄屏再改为双层触控条", () => {
     const home = declarations(style, ".home");
