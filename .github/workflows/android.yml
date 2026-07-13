@@ -1,0 +1,131 @@
+name: Android candidate and release build
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: Exact 40-character candidate commit SHA
+        required: true
+        type: string
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    environment: android-signing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate requested candidate SHA format
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          [[ "$REQUESTED_COMMIT" =~ ^[0-9a-fA-F]{40}$ ]] || {
+            echo "commit must be an exact 40-character SHA" >&2
+            exit 1
+          }
+
+      - name: Check out candidate or tag
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.commit || github.ref }}
+          fetch-depth: 0
+
+      - name: Verify requested candidate SHA
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD | tr '[:upper:]' '[:lower:]')"
+          requested="$(printf '%s' "$REQUESTED_COMMIT" | tr '[:upper:]' '[:lower:]')"
+          [[ "$actual" == "$requested" ]] || {
+            echo "checked out $actual instead of requested candidate" >&2
+            exit 1
+          }
+          git fetch origin main --no-tags
+          origin_main="$(git rev-parse origin/main | tr '[:upper:]' '[:lower:]')"
+          [[ "$actual" == "$origin_main" ]] || {
+            echo "candidate must equal origin/main" >&2
+            exit 1
+          }
+
+      - name: Record build commit
+        id: commit
+        run: echo "sha=$(git rev-parse HEAD | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK and NDK
+        run: |
+          set -euo pipefail
+          sdkmanager --install "platform-tools" "platforms;android-36" "build-tools;36.0.0" "ndk;27.2.12479018"
+          echo "NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - uses: dtolnay/rust-toolchain@1.96.1
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+
+      - run: npm ci
+      - run: npm run version:check
+      - name: Check tag versions
+        if: startsWith(github.ref, 'refs/tags/')
+        run: npm run version:check:tag
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+      - run: npm test
+
+      - name: Configure Android signing
+        env:
+          ANDROID_KEY_BASE64: ${{ secrets.ANDROID_KEY_BASE64 }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          set -euo pipefail
+          [[ -n "$ANDROID_KEY_BASE64" && -n "$ANDROID_KEY_PASSWORD" && -n "$ANDROID_KEY_ALIAS" ]] || {
+            echo "Android signing inputs are required" >&2
+            exit 1
+          }
+          umask 077
+          key_store="$RUNNER_TEMP/minesweeper.jks"
+          printf '%s' "$ANDROID_KEY_BASE64" | base64 --decode > "$key_store"
+          printf 'storeFile=%s\npassword=%s\nkeyAlias=%s\n' "$key_store" "$ANDROID_KEY_PASSWORD" "$ANDROID_KEY_ALIAS" > src-tauri/gen/android/keystore.properties
+
+      - name: Build and verify signed Android artifact
+        env:
+          ANDROID_CERT_SHA256: ${{ vars.ANDROID_CERT_SHA256 }}
+        run: |
+          set -euo pipefail
+          npm run android:release
+          mapfile -t apks < <(find artifacts/android -maxdepth 1 -type f -name '*.apk')
+          [[ "${#apks[@]}" -eq 1 ]] || { echo "expected exactly one APK" >&2; exit 1; }
+          [[ "$(wc -l < artifacts/android/SHA256SUMS.txt)" -eq 1 ]] || { echo "expected one checksum" >&2; exit 1; }
+          [[ -f artifacts/android/build-metadata.json ]] || { echo "missing metadata" >&2; exit 1; }
+
+      - name: Upload exact-SHA Android artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: minesweeper-android-${{ steps.commit.outputs.sha }}
+          path: artifacts/android
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Remove temporary signing material
+        if: always()
+        run: |
+          rm -f src-tauri/gen/android/keystore.properties
+          rm -f "$RUNNER_TEMP/minesweeper.jks"

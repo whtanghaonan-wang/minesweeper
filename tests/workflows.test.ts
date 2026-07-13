@@ -16,6 +16,24 @@ const readWorkflow = (path: string): Workflow =>
   parse(readFileSync(path, "utf8")) as Workflow;
 
 describe("GitHub Actions v2.3 闸门", () => {
+  it("Android 同时支持精确候选和标签，只构建候选产物而不发布", () => {
+    const workflow = readWorkflow(".github/workflows/android.yml");
+    expect(workflow.on?.["workflow_dispatch"]).toBeDefined();
+    expect(workflow.on?.["push"]).toEqual({ tags: ["v*"] });
+    expect(workflow.permissions).toEqual({ contents: "read" });
+    const job = workflow.jobs?.["build"];
+    expect(job?.environment).toBe("android-signing");
+    const text = JSON.stringify(job?.steps ?? []);
+    for (const required of [
+      "Verify requested candidate SHA", "origin/main", "actions/setup-java@v4",
+      "android-actions/setup-android@v3", "ndk;27.2.12479018",
+      "npm run version:check", "npm run version:check:tag", "npm test",
+      "npm run android:release", "actions/upload-artifact@v4",
+    ]) expect(text).toContain(required);
+    expect(text).not.toContain("softprops/action-gh-release");
+    expect(text).not.toContain("gh release create");
+  });
+
   it("Windows 同时支持精确候选和标签，只读权限且不自动发布", () => {
     const workflow = readWorkflow(".github/workflows/windows.yml");
     expect(workflow.on?.["workflow_dispatch"]).toBeDefined();

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 
 const source = readFileSync("scripts/android-release.mjs", "utf8");
+const androidWorkflow = readFileSync(".github/workflows/android.yml", "utf8");
 
 describe("android-release.mjs contract", () => {
   it("builds exactly one universal release APK and validates it", () => {
@@ -47,5 +48,14 @@ describe("android-release.mjs contract", () => {
   it("cleans artifacts created by a failed validation", () => {
     expect(source).toContain("unlinkSync");
     expect(source).toContain("finally");
+  });
+
+  it("keeps Android CI signing inputs scoped and never publishes a release", () => {
+    for (const required of [
+      "ANDROID_KEY_BASE64", "ANDROID_KEY_PASSWORD", "ANDROID_KEY_ALIAS",
+      "ANDROID_CERT_SHA256", "keystore.properties", "always()",
+    ]) expect(androidWorkflow).toContain(required);
+    expect(androidWorkflow).not.toContain("action-gh-release");
+    expect(androidWorkflow).not.toContain("gh release create");
   });
 });
