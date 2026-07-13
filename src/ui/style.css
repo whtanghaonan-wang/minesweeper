@@ -757,6 +757,7 @@ button:disabled {
   width: 100%;
   max-width: none;
   min-height: 100dvh;
+  container-type: inline-size;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -976,19 +977,23 @@ html[data-reduced-transparency] .home-play {
 
 @media (max-width: 1040px) {
   .home-panel {
-    width: min(100%, 24rem);
-    grid-template-columns: minmax(0, 1fr) auto;
+    width: min(100%, 48rem);
+    max-width: 48rem;
+    grid-template-columns: minmax(0, 1fr) minmax(18rem, 1.2fr);
     grid-template-areas:
       "stats tools"
       "bar bar"
-      "play play"
-      "secondary secondary";
-    gap: 0.625rem;
-    padding: 1rem 1.125rem;
+      "play secondary";
+    gap: 0.35rem 0.625rem;
+    padding: 0.5rem 1rem;
   }
 
   .home-stats {
     align-content: center;
+  }
+
+  .home-tools {
+    justify-content: flex-end;
   }
 
   .home-secondary-actions {
@@ -996,7 +1001,33 @@ html[data-reduced-transparency] .home-play {
   }
 }
 
+@media (max-width: 720px) {
+  .home-panel {
+    width: min(100%, 24rem);
+    max-width: 24rem;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "stats tools"
+      "bar bar"
+      "play play"
+      "secondary secondary";
+    padding: 1rem 1.125rem;
+  }
+}
+
 @media (max-width: 420px) {
+  .home-stats,
+  .home-tools {
+    justify-content: center;
+  }
+
+  .home-tools {
+    min-width: 0;
+    flex-wrap: wrap;
+  }
+}
+
+@container (max-width: 20rem) {
   .home-panel {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:

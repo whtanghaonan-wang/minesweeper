@@ -156,7 +156,7 @@ describe("Liquid Glass 静态约束", () => {
     expect(homePlay).not.toMatch(/backdrop-filter/);
     expect(homePlay).toMatch(/\bbackground\s*:/);
   });
-  it("v2.4 首页在桌面是横向胶囊，手机改为双层触控条", () => {
+  it("v2.4 首页在桌面和中间宽度保持横向胶囊，窄屏再改为双层触控条", () => {
     const home = declarations(style, ".home");
     expect(home).toContain("max-width: none");
     const panel = declarations(style, ".home-panel");
@@ -165,10 +165,18 @@ describe("Liquid Glass 静态约束", () => {
     expect(panel).toContain("max-width: 54rem");
     expect(style).toContain(".home-secondary-actions");
     expect(style).toContain(".home-tools");
-    expect(style).toMatch(/@media \(max-width: 1040px\)[\s\S]*"stats tools"[\s\S]*"play play"/);
-    expect(style).toMatch(
-      /@media \(max-width: 420px\)[\s\S]*"stats"[\s\S]*"tools"[\s\S]*"secondary"/,
-    );
+    const medium = declarationsInBlock(style, "@media (max-width: 1040px)", ".home-panel");
+    expect(medium).toContain("max-width: 48rem");
+    expect(medium).toContain('"stats tools"');
+    expect(medium).toContain('"play secondary"');
+    const narrow = declarationsInBlock(style, "@media (max-width: 720px)", ".home-panel");
+    expect(narrow).toContain("max-width: 24rem");
+    expect(narrow).toContain('"stats tools"');
+    expect(narrow).toContain('"play play"');
+    const highFont = declarationsInBlock(style, "@container (max-width: 20rem)", ".home-panel");
+    expect(highFont).toContain('"stats"');
+    expect(highFont).toContain('"tools"');
+    expect(highFont).toContain('"secondary"');
   });
   it("移动端游戏顶栏收窄并让四个统计/操作槽位等宽对称", () => {
     const gameTop = declarations(style, ".game-top");

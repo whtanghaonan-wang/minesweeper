@@ -62,6 +62,20 @@ async function expectTouchTargets(page: Page): Promise<void> {
   }
 }
 
+async function expectLowWideHomePanel(page: Page, width: number): Promise<Rect> {
+  await page.setViewportSize({ width, height: 900 });
+  await page.goto("/");
+  const panel = (await page.locator(".home-panel").boundingBox())!;
+  expect(panel.width / panel.height, `${width}px panel=${JSON.stringify(panel)}`)
+    .toBeGreaterThan(3.5);
+  expect(panel.height, `${width}px panel=${JSON.stringify(panel)}`).toBeLessThan(190);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth), `${width}px scrollWidth`)
+    .toBe(width);
+  await expectHomeContentInsidePanel(page);
+  await expectTouchTargets(page);
+  return panel;
+}
+
 async function openGame(page: Page, width: number, height = 844): Promise<void> {
   await page.setViewportSize({ width, height });
   await page.goto("/");
@@ -125,6 +139,12 @@ test("390px 首页完整可触控且不横向溢出", async ({ page }) => {
     expect(box!.width).toBeGreaterThanOrEqual(44);
     expect(box!.height).toBeGreaterThanOrEqual(44);
   }
+  const stats = (await page.locator(".home-stats").boundingBox())!;
+  const tools = (await page.locator(".home-tools").boundingBox())!;
+  expect(
+    stats.y < tools.y + tools.height && tools.y < stats.y + stats.height,
+    `stats=${JSON.stringify(stats)} tools=${JSON.stringify(tools)}`,
+  ).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
 });
 
@@ -174,14 +194,25 @@ test("1024x600 短桌面保持双行顶栏且标题和统计栏不重叠", async
   await expectGameTopGeometry(page, 1024, 600);
 });
 
-test("721–1024px 首页分区均位于胶囊内且不横向溢出", async ({ page }) => {
-  for (const width of [721, 768, 900, 1024]) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.goto("/");
-    expect(await page.evaluate(() => document.documentElement.scrollWidth), `${width}px scrollWidth`)
-      .toBe(width);
-    await expectHomeContentInsidePanel(page);
-  }
+test("721–1040px 首页保持低矮宽胶囊且内容完整可触控", async ({ page }) => {
+  for (const width of [721, 768, 900, 1024, 1040]) await expectLowWideHomePanel(page, width);
+});
+
+test("720/721px 只切换布局层级且两侧都不溢出", async ({ page }) => {
+  await page.setViewportSize({ width: 720, height: 900 });
+  await page.goto("/");
+  await expectHomeContentInsidePanel(page);
+  await expectTouchTargets(page);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(720);
+
+  await expectLowWideHomePanel(page, 721);
+});
+
+test("1040/1041px 均为低矮宽胶囊且断点前后尺寸平稳", async ({ page }) => {
+  const below = await expectLowWideHomePanel(page, 1040);
+  const above = await expectLowWideHomePanel(page, 1041);
+  expect(Math.abs(below.width - above.width)).toBeLessThan(above.width * 0.2);
+  expect(Math.abs(below.height - above.height)).toBeLessThan(above.height * 0.6);
 });
 
 for (const width of [320, 360, 361, 370, 390, 420]) {
