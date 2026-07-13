@@ -12,6 +12,9 @@ export interface HomeLiquidSelectionController {
 
 const NAVIGATION_DELAY_MS = 220;
 const CLICK_DURATION_MS = 580;
+const DRAG_SETTLE_MS = 420;
+const DRAG_MOVE_THRESHOLD_PX = 5;
+const DRAG_FRAME_DELAY_MS = 16;
 const TARGET_PADDING_PX = 5;
 const MIN_TARGET_PX = 48;
 const PANEL_SAFETY_PX = 6;
@@ -27,6 +30,43 @@ interface TargetGeometry {
 interface MeasuredTarget {
   geometry: TargetGeometry;
   layoutAvailable: boolean;
+  targetCenterX: number;
+  targetCenterY: number;
+  targetWidth: number;
+  targetHeight: number;
+}
+
+interface PanelBox {
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}
+
+interface PointerSample {
+  clientX: number;
+  clientY: number;
+}
+
+interface ActiveDrag {
+  pointerId: number;
+  startX: number;
+  startY: number;
+  lastRenderedX: number;
+  lastRenderedY: number;
+  originGeometry: TargetGeometry;
+  pendingSample: PointerSample | null;
+  candidate: HomeLiquidTarget | null;
+  frameId: number | null;
+  frameKind: "animation" | "timer" | null;
+  moved: boolean;
+}
+
+interface MagneticTarget {
+  target: HomeLiquidTarget;
+  geometry: TargetGeometry;
+  distance: number;
+  threshold: number;
 }
 
 function clampCenter(value: number, size: number, panelSize: number): number {
@@ -40,18 +80,35 @@ function px(value: number): string {
   return `${Math.round(value * 1000) / 1000}px`;
 }
 
+function measurePanelBox(panel: HTMLElement): PanelBox | null {
+  try {
+    const panelRect = panel.getBoundingClientRect();
+    if (![panelRect.left, panelRect.top, panelRect.width, panelRect.height].every(
+      Number.isFinite,
+    )) return null;
+    const hasClientWidth = panel.clientWidth > 0;
+    const hasClientHeight = panel.clientHeight > 0;
+    const box = {
+      left: panelRect.left + (hasClientWidth ? panel.clientLeft : 0),
+      top: panelRect.top + (hasClientHeight ? panel.clientTop : 0),
+      width: hasClientWidth ? panel.clientWidth : panelRect.width,
+      height: hasClientHeight ? panel.clientHeight : panelRect.height,
+    };
+    return Object.values(box).every(Number.isFinite) ? box : null;
+  } catch {
+    return null;
+  }
+}
+
 function measureTarget(
   panel: HTMLElement,
   button: HTMLButtonElement,
 ): MeasuredTarget | null {
   try {
-    const panelRect = panel.getBoundingClientRect();
+    const panelBox = measurePanelBox(panel);
     const targetRect = button.getBoundingClientRect();
+    if (!panelBox) return null;
     const values = [
-      panelRect.left,
-      panelRect.top,
-      panelRect.width,
-      panelRect.height,
       targetRect.left,
       targetRect.top,
       targetRect.width,
@@ -59,34 +116,32 @@ function measureTarget(
     ];
     if (!values.every(Number.isFinite)) return null;
 
-    const hasClientWidth = panel.clientWidth > 0;
-    const hasClientHeight = panel.clientHeight > 0;
-    const panelWidth = hasClientWidth ? panel.clientWidth : panelRect.width;
-    const panelHeight = hasClientHeight ? panel.clientHeight : panelRect.height;
-    const panelLeft = panelRect.left + (hasClientWidth ? panel.clientLeft : 0);
-    const panelTop = panelRect.top + (hasClientHeight ? panel.clientTop : 0);
     const desiredWidth = Math.max(MIN_TARGET_PX, targetRect.width + TARGET_PADDING_PX * 2);
     const desiredHeight = Math.max(MIN_TARGET_PX, targetRect.height + TARGET_PADDING_PX * 2);
-    const width = panelWidth > 0
-      ? Math.min(desiredWidth, Math.max(0, panelWidth - PANEL_SAFETY_PX * 2))
+    const width = panelBox.width > 0
+      ? Math.min(desiredWidth, Math.max(0, panelBox.width - PANEL_SAFETY_PX * 2))
       : desiredWidth;
-    const height = panelHeight > 0
-      ? Math.min(desiredHeight, Math.max(0, panelHeight - PANEL_SAFETY_PX * 2))
+    const height = panelBox.height > 0
+      ? Math.min(desiredHeight, Math.max(0, panelBox.height - PANEL_SAFETY_PX * 2))
       : desiredHeight;
-    const targetCenterX = targetRect.left + targetRect.width / 2 - panelLeft;
-    const targetCenterY = targetRect.top + targetRect.height / 2 - panelTop;
+    const targetCenterX = targetRect.left + targetRect.width / 2 - panelBox.left;
+    const targetCenterY = targetRect.top + targetRect.height / 2 - panelBox.top;
 
     return {
       geometry: {
-        left: clampCenter(targetCenterX, width, panelWidth),
-        top: clampCenter(targetCenterY, height, panelHeight),
+        left: clampCenter(targetCenterX, width, panelBox.width),
+        top: clampCenter(targetCenterY, height, panelBox.height),
         width,
         height,
       },
-      layoutAvailable: panelWidth > 0
-        && panelHeight > 0
+      layoutAvailable: panelBox.width > 0
+        && panelBox.height > 0
         && targetRect.width > 0
         && targetRect.height > 0,
+      targetCenterX,
+      targetCenterY,
+      targetWidth: targetRect.width,
+      targetHeight: targetRect.height,
     };
   } catch {
     return null;
@@ -139,15 +194,21 @@ export function installHomeLiquidSelection(
     throw new Error("Home liquid selection initial target cannot be disabled");
   }
 
-  const ownerWindow = panel.ownerDocument.defaultView;
-  if (!ownerWindow) {
+  const ownerDocument = panel.ownerDocument;
+  const defaultView = ownerDocument.defaultView;
+  if (!defaultView) {
     throw new Error("Home liquid selection requires an owner window");
   }
+  const ownerWindow: Window & typeof globalThis = defaultView;
   let selectedTarget = initialTarget;
   let currentGeometry: TargetGeometry | null = null;
   let currentLayoutAvailable = false;
   let pendingActivation: number | undefined;
+  let pendingCompatibilityReset: number | undefined;
   let activeAnimation: Animation | null = null;
+  let activeDrag: ActiveDrag | null = null;
+  let activeListenersInstalled = false;
+  let compatibilityClickSuppressed = false;
   let destroyed = false;
 
   const cancelPendingActivation = (): void => {
@@ -166,7 +227,11 @@ export function installHomeLiquidSelection(
     activeAnimation = null;
   };
 
-  const moveIndicator = (button: HTMLButtonElement, animate: boolean): void => {
+  const moveIndicator = (
+    button: HTMLButtonElement,
+    animate: boolean,
+    duration = CLICK_DURATION_MS,
+  ): void => {
     const measuredTarget = measureTarget(panel, button);
     if (!measuredTarget) return;
 
@@ -196,7 +261,7 @@ export function installHomeLiquidSelection(
           frame(nextGeometry, "1, 1", 1),
         ],
         {
-          duration: CLICK_DURATION_MS,
+          duration,
           easing: "cubic-bezier(.16,1,.3,1)",
           fill: "forwards",
         },
@@ -225,8 +290,360 @@ export function installHomeLiquidSelection(
     }, NAVIGATION_DELAY_MS);
   };
 
+  const activateSelectedTarget = (target: HomeLiquidTarget): void => {
+    if (target.kind === "instant") {
+      target.activate();
+    } else {
+      activateAfterNavigationDelay(target);
+    }
+  };
+
+  const clearCompatibilitySuppression = (): void => {
+    if (pendingCompatibilityReset !== undefined) {
+      ownerWindow.clearTimeout(pendingCompatibilityReset);
+      pendingCompatibilityReset = undefined;
+    }
+    compatibilityClickSuppressed = false;
+  };
+
+  const suppressCompatibilityClicks = (): void => {
+    clearCompatibilitySuppression();
+    compatibilityClickSuppressed = true;
+    pendingCompatibilityReset = ownerWindow.setTimeout(() => {
+      pendingCompatibilityReset = undefined;
+      compatibilityClickSuppressed = false;
+    }, DRAG_SETTLE_MS);
+  };
+
+  const clearCandidateClasses = (): void => {
+    for (const target of targets) target.button.classList.remove("is-home-candidate");
+  };
+
+  const showCandidate = (
+    session: ActiveDrag,
+    target: HomeLiquidTarget | null,
+  ): void => {
+    session.candidate = target;
+    for (const candidate of targets) {
+      candidate.button.classList.toggle(
+        "is-home-candidate",
+        candidate === target && candidate !== selectedTarget && !candidate.button.disabled,
+      );
+    }
+  };
+
+  const findMagneticTarget = (x: number, y: number): MagneticTarget | null => {
+    let nearest: MagneticTarget | null = null;
+    for (const target of targets) {
+      if (target.button.disabled) continue;
+      const measured = measureTarget(panel, target.button);
+      if (!measured) continue;
+      const { geometry } = measured;
+      const distance = Math.hypot(
+        x - measured.targetCenterX,
+        y - measured.targetCenterY,
+      );
+      const threshold = Math.max(
+        64,
+        Math.min(105, Math.hypot(measured.targetWidth, measured.targetHeight) * 0.58),
+      );
+      if (distance > threshold || (nearest && distance >= nearest.distance)) continue;
+      nearest = { target, geometry, distance, threshold };
+    }
+    return nearest;
+  };
+
+  const writePanelOptics = (x: number, y: number, box: PanelBox): void => {
+    const normalizedX = box.width > 0
+      ? Math.max(0, Math.min(1, x / box.width))
+      : 0.5;
+    const normalizedY = box.height > 0
+      ? Math.max(0, Math.min(1, y / box.height))
+      : 0.5;
+    panel.style.setProperty(
+      "--glass-x",
+      `${Math.round(normalizedX * 10000) / 100}%`,
+    );
+    panel.style.setProperty(
+      "--glass-y",
+      `${Math.round(normalizedY * 10000) / 100}%`,
+    );
+    panel.style.setProperty("--glass-dx", String((normalizedX - 0.5) * 2));
+    panel.style.setProperty("--glass-dy", String((normalizedY - 0.5) * 2));
+  };
+
+  const applyPointerSample = (session: ActiveDrag, sample: PointerSample): void => {
+    if (activeDrag !== session) return;
+    const box = measurePanelBox(panel);
+    if (!box) return;
+    const pointerX = sample.clientX - box.left;
+    const pointerY = sample.clientY - box.top;
+    const magnetic = findMagneticTarget(pointerX, pointerY);
+    const strength = magnetic
+      ? Math.max(0, 1 - magnetic.distance / magnetic.threshold)
+      : 0;
+    const width = magnetic
+      ? session.originGeometry.width
+        + (magnetic.geometry.width - session.originGeometry.width) * strength
+      : session.originGeometry.width;
+    const height = magnetic
+      ? session.originGeometry.height
+        + (magnetic.geometry.height - session.originGeometry.height) * strength
+      : session.originGeometry.height;
+    const magneticPull = strength * 0.45;
+    const desiredX = magnetic
+      ? pointerX + (magnetic.geometry.left - pointerX) * magneticPull
+      : pointerX;
+    const desiredY = magnetic
+      ? pointerY + (magnetic.geometry.top - pointerY) * magneticPull
+      : pointerY;
+    const geometry = {
+      left: clampCenter(desiredX, width, box.width),
+      top: clampCenter(desiredY, height, box.height),
+      width,
+      height,
+    };
+    const velocityX = Math.min(1, Math.abs(sample.clientX - session.lastRenderedX) / 48);
+    const velocityY = Math.min(1, Math.abs(sample.clientY - session.lastRenderedY) / 48);
+    const scaleX = Math.max(0.8, Math.min(1.28, 1 + velocityX * 0.28 - velocityY * 0.1));
+    const scaleY = Math.max(0.8, Math.min(1.2, 1 + velocityY * 0.2 - velocityX * 0.1));
+
+    session.lastRenderedX = sample.clientX;
+    session.lastRenderedY = sample.clientY;
+    currentGeometry = geometry;
+    currentLayoutAvailable = box.width > 0 && box.height > 0;
+    showCandidate(session, magnetic?.target ?? null);
+    applyGeometry(indicator, geometry);
+    indicator.style.transform = `${BASE_TRANSFORM} scale(${Math.round(scaleX * 1000) / 1000}, ${
+      Math.round(scaleY * 1000) / 1000
+    })`;
+    writePanelOptics(pointerX, pointerY, box);
+  };
+
+  const cancelScheduledFrame = (session: ActiveDrag): void => {
+    if (session.frameId === null) return;
+    const frameId = session.frameId;
+    const frameKind = session.frameKind;
+    session.frameId = null;
+    session.frameKind = null;
+    if (frameKind === "animation") {
+      try {
+        ownerWindow.cancelAnimationFrame?.(frameId);
+      } catch {
+        // A partial animation-frame implementation must not strand the drag.
+      }
+    } else {
+      ownerWindow.clearTimeout(frameId);
+    }
+  };
+
+  const renderPendingSample = (session: ActiveDrag): void => {
+    if (activeDrag !== session) return;
+    const sample = session.pendingSample;
+    session.pendingSample = null;
+    if (sample) applyPointerSample(session, sample);
+  };
+
+  const schedulePendingSample = (session: ActiveDrag): void => {
+    if (session.frameId !== null) return;
+    const onFrame = (): void => {
+      session.frameId = null;
+      session.frameKind = null;
+      renderPendingSample(session);
+    };
+    if (typeof ownerWindow.requestAnimationFrame === "function") {
+      try {
+        session.frameKind = "animation";
+        session.frameId = ownerWindow.requestAnimationFrame(onFrame);
+        return;
+      } catch {
+        session.frameId = null;
+        session.frameKind = null;
+      }
+    }
+    session.frameKind = "timer";
+    session.frameId = ownerWindow.setTimeout(onFrame, DRAG_FRAME_DELAY_MS);
+  };
+
+  const flushPendingSample = (session: ActiveDrag): void => {
+    cancelScheduledFrame(session);
+    renderPendingSample(session);
+  };
+
+  const updatePointerSample = (session: ActiveDrag, event: PointerEvent): void => {
+    if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
+    session.moved ||= Math.hypot(
+      event.clientX - session.startX,
+      event.clientY - session.startY,
+    ) > DRAG_MOVE_THRESHOLD_PX;
+    session.pendingSample = { clientX: event.clientX, clientY: event.clientY };
+  };
+
+  const releasePointerCapture = (pointerId: number): void => {
+    try {
+      const hasCapture = panel.hasPointerCapture;
+      if (typeof hasCapture === "function" && !hasCapture.call(panel, pointerId)) return;
+      const releaseCapture = panel.releasePointerCapture;
+      if (typeof releaseCapture === "function") releaseCapture.call(panel, pointerId);
+    } catch {
+      // Capture is an optimization; window end listeners are the fallback.
+    }
+  };
+
+  function installActiveListeners(): void {
+    if (activeListenersInstalled) return;
+    activeListenersInstalled = true;
+    ownerWindow.addEventListener("pointermove", onActivePointerMove, {
+      capture: true,
+      passive: false,
+    });
+    ownerWindow.addEventListener("pointerup", onActivePointerUp, true);
+    ownerWindow.addEventListener("pointercancel", onActivePointerCancel, true);
+    ownerWindow.addEventListener("blur", onActiveWindowBlur, true);
+    ownerDocument.addEventListener("visibilitychange", onVisibilityChange, true);
+  }
+
+  function removeActiveListeners(): void {
+    if (!activeListenersInstalled) return;
+    activeListenersInstalled = false;
+    ownerWindow.removeEventListener("pointermove", onActivePointerMove, true);
+    ownerWindow.removeEventListener("pointerup", onActivePointerUp, true);
+    ownerWindow.removeEventListener("pointercancel", onActivePointerCancel, true);
+    ownerWindow.removeEventListener("blur", onActiveWindowBlur, true);
+    ownerDocument.removeEventListener("visibilitychange", onVisibilityChange, true);
+  }
+
+  const clearDragSession = (session: ActiveDrag): void => {
+    if (activeDrag !== session) return;
+    activeDrag = null;
+    cancelScheduledFrame(session);
+    session.pendingSample = null;
+    clearCandidateClasses();
+    removeActiveListeners();
+    releasePointerCapture(session.pointerId);
+  };
+
+  const cancelActiveDrag = (snapBack: boolean, animate = true): void => {
+    const session = activeDrag;
+    if (!session) return;
+    clearDragSession(session);
+    if (snapBack && !destroyed) {
+      moveIndicator(selectedTarget.button, animate, DRAG_SETTLE_MS);
+    }
+  };
+
+  function onActivePointerMove(event: Event): void {
+    const pointer = event as PointerEvent;
+    const session = activeDrag;
+    if (!session || pointer.pointerId !== session.pointerId) return;
+    event.preventDefault();
+    updatePointerSample(session, pointer);
+    schedulePendingSample(session);
+  }
+
+  function onActivePointerUp(event: Event): void {
+    const pointer = event as PointerEvent;
+    const session = activeDrag;
+    if (!session || pointer.pointerId !== session.pointerId) return;
+    updatePointerSample(session, pointer);
+    flushPendingSample(session);
+    const moved = session.moved;
+    const candidate = session.candidate;
+    clearDragSession(session);
+    if (destroyed) return;
+
+    if (moved) suppressCompatibilityClicks();
+    if (
+      moved
+      && candidate
+      && candidate !== selectedTarget
+      && !candidate.button.disabled
+    ) {
+      cancelPendingActivation();
+      markSelected(candidate);
+      moveIndicator(candidate.button, true, DRAG_SETTLE_MS);
+      activateSelectedTarget(candidate);
+      return;
+    }
+    moveIndicator(selectedTarget.button, true, DRAG_SETTLE_MS);
+  }
+
+  function onActivePointerCancel(event: Event): void {
+    const pointer = event as PointerEvent;
+    if (!activeDrag || pointer.pointerId !== activeDrag.pointerId) return;
+    cancelActiveDrag(true);
+  }
+
+  function onActiveWindowBlur(): void {
+    cancelActiveDrag(true);
+  }
+
+  function onVisibilityChange(): void {
+    if (ownerDocument.visibilityState === "hidden") cancelActiveDrag(true);
+  }
+
+  function onLostPointerCapture(event: Event): void {
+    const pointer = event as PointerEvent;
+    if (!activeDrag || pointer.pointerId !== activeDrag.pointerId) return;
+    cancelActiveDrag(true);
+  }
+
+  function onPointerDown(event: Event): void {
+    const pointer = event as PointerEvent;
+    if (
+      destroyed
+      || pointer.isPrimary === false
+      || (pointer.pointerType === "mouse" && pointer.button !== 0)
+      || !(event.target instanceof ownerWindow.Node)
+      || !Number.isFinite(pointer.clientX)
+      || !Number.isFinite(pointer.clientY)
+    ) return;
+    const source = event.target as Node;
+    if (!indicator.contains(source) && !selectedTarget.button.contains(source)) return;
+
+    if (activeDrag) cancelActiveDrag(true);
+    const originGeometry = measureTarget(panel, selectedTarget.button)?.geometry
+      ?? currentGeometry;
+    if (!originGeometry) return;
+    cancelAnimation();
+    const pointerId = Number.isFinite(pointer.pointerId) ? pointer.pointerId : 0;
+    const session: ActiveDrag = {
+      pointerId,
+      startX: pointer.clientX,
+      startY: pointer.clientY,
+      lastRenderedX: pointer.clientX,
+      lastRenderedY: pointer.clientY,
+      originGeometry,
+      pendingSample: null,
+      candidate: null,
+      frameId: null,
+      frameKind: null,
+      moved: false,
+    };
+    activeDrag = session;
+    clearCandidateClasses();
+    installActiveListeners();
+    const box = measurePanelBox(panel);
+    if (box) {
+      writePanelOptics(pointer.clientX - box.left, pointer.clientY - box.top, box);
+    }
+    try {
+      const setCapture = panel.setPointerCapture;
+      if (typeof setCapture === "function") setCapture.call(panel, pointerId);
+    } catch {
+      // Window-level end listeners keep the session recoverable without capture.
+    }
+    event.preventDefault();
+  }
+
   const onClick = (event: Event): void => {
-    if (destroyed || !(event.target instanceof ownerWindow.Node)) return;
+    if (destroyed) return;
+    if (compatibilityClickSuppressed && (event as MouseEvent).detail !== 0) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      return;
+    }
+    if (!(event.target instanceof ownerWindow.Node)) return;
     const target = targets.find((candidate) => candidate.button.contains(event.target as Node));
     if (!target || target.button.disabled) return;
 
@@ -238,30 +655,33 @@ export function installHomeLiquidSelection(
 
     markSelected(target);
     moveIndicator(target.button, true);
-    if (target.kind === "instant") {
-      target.activate();
-    } else {
-      activateAfterNavigationDelay(target);
-    }
+    activateSelectedTarget(target);
   };
 
   const onResize = (): void => {
     if (destroyed) return;
+    cancelActiveDrag(false);
     moveIndicator(selectedTarget.button, false);
   };
 
   markSelected(initialTarget);
   moveIndicator(initialTarget.button, false);
   panel.addEventListener("click", onClick);
+  panel.addEventListener("pointerdown", onPointerDown, true);
+  panel.addEventListener("lostpointercapture", onLostPointerCapture);
   ownerWindow.addEventListener("resize", onResize);
 
   return {
     destroy(): void {
       if (destroyed) return;
       destroyed = true;
+      cancelActiveDrag(false);
       cancelPendingActivation();
+      clearCompatibilitySuppression();
       cancelAnimation();
       panel.removeEventListener("click", onClick);
+      panel.removeEventListener("pointerdown", onPointerDown, true);
+      panel.removeEventListener("lostpointercapture", onLostPointerCapture);
       ownerWindow.removeEventListener("resize", onResize);
       for (const target of targets) {
         target.button.classList.remove("is-home-selected", "is-home-candidate");

@@ -17,6 +17,21 @@ interface Fixture {
   targets: HomeLiquidTarget[];
 }
 
+interface PointerLikeInit extends MouseEventInit {
+  pointerId?: number;
+  pointerType?: string;
+  isPrimary?: boolean;
+}
+
+interface RafQueue {
+  request: ReturnType<typeof vi.fn>;
+  cancel: ReturnType<typeof vi.fn>;
+  pending(): number;
+  flush(): void;
+}
+
+const restoreRafQueues: Array<() => void> = [];
+
 function rect(left: number, top: number, width: number, height: number): DOMRect {
   return {
     left,
@@ -51,6 +66,71 @@ function setClientBox(
     clientWidth: { configurable: true, value: width },
     clientHeight: { configurable: true, value: height },
   });
+}
+
+function dispatchPointer(
+  target: EventTarget,
+  type: string,
+  init: PointerLikeInit = {},
+  ownerWindow: Window = window,
+): MouseEvent {
+  const event = new (ownerWindow as Window & typeof globalThis).MouseEvent(type, {
+    bubbles: true,
+    cancelable: true,
+    button: init.button ?? 0,
+    buttons: init.buttons ?? (type === "pointerup" || type === "pointercancel" ? 0 : 1),
+    clientX: init.clientX ?? 0,
+    clientY: init.clientY ?? 0,
+    detail: init.detail ?? 0,
+  });
+  Object.defineProperties(event, {
+    pointerId: { configurable: true, value: init.pointerId ?? 1 },
+    pointerType: { configurable: true, value: init.pointerType ?? "mouse" },
+    isPrimary: { configurable: true, value: init.isPrimary ?? true },
+  });
+  target.dispatchEvent(event);
+  return event;
+}
+
+function installRafQueue(ownerWindow: Window = window): RafQueue {
+  const requestDescriptor = Object.getOwnPropertyDescriptor(ownerWindow, "requestAnimationFrame");
+  const cancelDescriptor = Object.getOwnPropertyDescriptor(ownerWindow, "cancelAnimationFrame");
+  const callbacks = new Map<number, FrameRequestCallback>();
+  let nextId = 1;
+  const request = vi.fn((callback: FrameRequestCallback): number => {
+    const id = nextId++;
+    callbacks.set(id, callback);
+    return id;
+  });
+  const cancel = vi.fn((id: number): void => {
+    callbacks.delete(id);
+  });
+  Object.defineProperties(ownerWindow, {
+    requestAnimationFrame: { configurable: true, value: request },
+    cancelAnimationFrame: { configurable: true, value: cancel },
+  });
+  restoreRafQueues.push(() => {
+    if (requestDescriptor) {
+      Object.defineProperty(ownerWindow, "requestAnimationFrame", requestDescriptor);
+    } else {
+      Reflect.deleteProperty(ownerWindow, "requestAnimationFrame");
+    }
+    if (cancelDescriptor) {
+      Object.defineProperty(ownerWindow, "cancelAnimationFrame", cancelDescriptor);
+    } else {
+      Reflect.deleteProperty(ownerWindow, "cancelAnimationFrame");
+    }
+  });
+  return {
+    request,
+    cancel,
+    pending: () => callbacks.size,
+    flush(): void {
+      const queued = [...callbacks.entries()];
+      callbacks.clear();
+      for (const [, callback] of queued) callback(16);
+    },
+  };
 }
 
 function createFixture(ownerDocument: Document = document): Fixture {
@@ -102,6 +182,7 @@ describe("installHomeLiquidSelection", () => {
   });
 
   afterEach(() => {
+    for (const restore of restoreRafQueues.splice(0)) restore();
     vi.useRealTimers();
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
@@ -502,6 +583,529 @@ describe("installHomeLiquidSelection", () => {
     expect(setOwnerTimeout).toHaveBeenCalledWith(expect.any(Function), 220);
     controller.destroy();
     expect(clearOwnerTimeout).toHaveBeenCalledWith(42);
+  });
+
+  it("supports 20 consecutive drags from the newly selected lobe with fresh pointer ids", () => {
+    const fixture = createFixture();
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+    const centers = new Map<HTMLButtonElement, [number, number]>([
+      [fixture.play, [155, 100]],
+      [fixture.select, [90, 164]],
+      [fixture.sound, [267, 164]],
+    ]);
+    const sequence = Array.from(
+      { length: 20 },
+      (_, index) => [fixture.select, fixture.sound, fixture.play][index % 3],
+    );
+    const expected = new Map<HTMLButtonElement, number>();
+    let current = fixture.play;
+
+    sequence.forEach((next, index) => {
+      const [startX, startY] = centers.get(current)!;
+      const [endX, endY] = centers.get(next)!;
+      const pointerId = 100 + index;
+      dispatchPointer(fixture.indicator, "pointerdown", {
+        pointerId,
+        clientX: startX,
+        clientY: startY,
+      });
+      dispatchPointer(window, "pointermove", {
+        pointerId,
+        clientX: endX,
+        clientY: endY,
+      });
+      dispatchPointer(window, "pointerup", {
+        pointerId,
+        clientX: endX,
+        clientY: endY,
+      });
+      if (next !== fixture.sound) vi.advanceTimersByTime(220);
+
+      expected.set(next, (expected.get(next) ?? 0) + 1);
+      expect(next.classList.contains("is-home-selected"), `drag ${index + 1}`).toBe(true);
+      expect(fixture.playActivate).toHaveBeenCalledTimes(expected.get(fixture.play) ?? 0);
+      expect(fixture.selectActivate).toHaveBeenCalledTimes(expected.get(fixture.select) ?? 0);
+      expect(fixture.soundActivate).toHaveBeenCalledTimes(expected.get(fixture.sound) ?? 0);
+      current = next;
+    });
+
+    expect(fixture.playActivate.mock.calls.length
+      + fixture.selectActivate.mock.calls.length
+      + fixture.soundActivate.mock.calls.length).toBe(20);
+    controller.destroy();
+  });
+
+  it("recovers from pointer 41 losing capture before pointer 42 drags successfully", () => {
+    const fixture = createFixture();
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+
+    dispatchPointer(fixture.play, "pointerdown", {
+      pointerId: 41,
+      clientX: 155,
+      clientY: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 41,
+      clientX: 267,
+      clientY: 164,
+    });
+    dispatchPointer(fixture.panel, "lostpointercapture", { pointerId: 41 });
+
+    expect(fixture.indicator.style.left).toBe("145px");
+    expect(fixture.indicator.style.top).toBe("80px");
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 42,
+      clientX: 155,
+      clientY: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 42,
+      clientX: 90,
+      clientY: 164,
+    });
+    dispatchPointer(window, "pointerup", {
+      pointerId: 42,
+      clientX: 90,
+      clientY: 164,
+    });
+    vi.advanceTimersByTime(220);
+
+    expect(fixture.select.classList.contains("is-home-selected")).toBe(true);
+    expect(fixture.selectActivate).toHaveBeenCalledTimes(1);
+    expect(fixture.playActivate).not.toHaveBeenCalled();
+    expect(fixture.soundActivate).not.toHaveBeenCalled();
+    controller.destroy();
+  });
+
+  it.each([
+    ["empty release", (_fixture: Fixture) => {
+      dispatchPointer(window, "pointermove", { pointerId: 7, clientX: 320, clientY: 30 });
+      dispatchPointer(window, "pointerup", { pointerId: 7, clientX: 320, clientY: 30 });
+    }],
+    ["return-to-current release", (_fixture: Fixture) => {
+      dispatchPointer(window, "pointermove", { pointerId: 7, clientX: 320, clientY: 30 });
+      dispatchPointer(window, "pointerup", { pointerId: 7, clientX: 155, clientY: 100 });
+    }],
+    ["pointer cancellation", (_fixture: Fixture) => {
+      dispatchPointer(window, "pointermove", { pointerId: 7, clientX: 267, clientY: 164 });
+      dispatchPointer(window, "pointercancel", { pointerId: 7, clientX: 267, clientY: 164 });
+    }],
+    ["window blur", (_fixture: Fixture) => {
+      dispatchPointer(window, "pointermove", { pointerId: 7, clientX: 267, clientY: 164 });
+      window.dispatchEvent(new Event("blur"));
+    }],
+    ["hidden document", (_fixture: Fixture) => {
+      dispatchPointer(window, "pointermove", { pointerId: 7, clientX: 267, clientY: 164 });
+      vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+      document.dispatchEvent(new Event("visibilitychange"));
+    }],
+  ])("snaps back without activation after %s", (_, finish) => {
+    const fixture = createFixture();
+    const addWindowListener = vi.spyOn(window, "addEventListener");
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 7,
+      clientX: 155,
+      clientY: 100,
+    });
+    expect(addWindowListener.mock.calls.some(([type]) => type === "pointermove")).toBe(true);
+
+    finish(fixture);
+    vi.runAllTimers();
+
+    expect(fixture.play.classList.contains("is-home-selected")).toBe(true);
+    expect(fixture.indicator.style.left).toBe("145px");
+    expect(fixture.indicator.style.top).toBe("80px");
+    expect(fixture.indicator.style.transform).not.toContain("rotate");
+    expect(fixture.playActivate).not.toHaveBeenCalled();
+    expect(fixture.selectActivate).not.toHaveBeenCalled();
+    expect(fixture.soundActivate).not.toHaveBeenCalled();
+    controller.destroy();
+  });
+
+  it("never makes a disabled target a candidate, selection, or activation", () => {
+    const fixture = createFixture();
+    const raf = installRafQueue();
+    fixture.sound.disabled = true;
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 8,
+      clientX: 155,
+      clientY: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 8,
+      clientX: 267,
+      clientY: 164,
+    });
+    expect(raf.request).toHaveBeenCalledTimes(1);
+    raf.flush();
+
+    expect(fixture.sound.classList.contains("is-home-candidate")).toBe(false);
+    expect(fixture.indicator.style.left).not.toBe("145px");
+    dispatchPointer(window, "pointerup", {
+      pointerId: 8,
+      clientX: 267,
+      clientY: 164,
+    });
+    expect(fixture.play.classList.contains("is-home-selected")).toBe(true);
+    expect(fixture.sound.classList.contains("is-home-selected")).toBe(false);
+    expect(fixture.soundActivate).not.toHaveBeenCalled();
+    controller.destroy();
+  });
+
+  it("computes magnetic reach from the button size rather than padded lobe size", () => {
+    const fixture = createFixture();
+    const raf = installRafQueue();
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 81,
+      clientX: 155,
+      clientY: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 81,
+      clientX: 12,
+      clientY: 164,
+    });
+    raf.flush();
+
+    expect(fixture.select.classList.contains("is-home-candidate")).toBe(false);
+    dispatchPointer(window, "pointercancel", { pointerId: 81 });
+    controller.destroy();
+  });
+
+  it("ignores non-primary, right-button, and unselected-target pointer starts", () => {
+    const fixture = createFixture();
+    const setPointerCapture = vi.fn();
+    Object.defineProperty(fixture.panel, "setPointerCapture", {
+      configurable: true,
+      value: setPointerCapture,
+    });
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+
+    dispatchPointer(fixture.play, "pointerdown", {
+      pointerId: 1,
+      pointerType: "touch",
+      isPrimary: false,
+      clientX: 155,
+      clientY: 100,
+    });
+    dispatchPointer(fixture.play, "pointerdown", {
+      pointerId: 2,
+      pointerType: "mouse",
+      button: 2,
+      buttons: 2,
+      clientX: 155,
+      clientY: 100,
+    });
+    dispatchPointer(fixture.select, "pointerdown", {
+      pointerId: 3,
+      clientX: 90,
+      clientY: 164,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 3,
+      clientX: 267,
+      clientY: 164,
+    });
+    dispatchPointer(window, "pointerup", {
+      pointerId: 3,
+      clientX: 267,
+      clientY: 164,
+    });
+
+    expect(setPointerCapture).not.toHaveBeenCalled();
+    expect(fixture.play.classList.contains("is-home-selected")).toBe(true);
+    expect(fixture.soundActivate).not.toHaveBeenCalled();
+    dispatchPointer(fixture.play, "pointerdown", {
+      pointerId: 4,
+      clientX: 155,
+      clientY: 100,
+    });
+    expect(setPointerCapture).toHaveBeenCalledTimes(1);
+    dispatchPointer(window, "pointercancel", { pointerId: 4 });
+    controller.destroy();
+  });
+
+  it("coalesces moves into one frame and flushes the final pointerup sample", () => {
+    const fixture = createFixture();
+    const raf = installRafQueue();
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 9,
+      clientX: 155,
+      clientY: 100,
+    });
+
+    dispatchPointer(window, "pointermove", { pointerId: 9, clientX: 110, clientY: 145 });
+    dispatchPointer(window, "pointermove", { pointerId: 9, clientX: 90, clientY: 164 });
+    dispatchPointer(window, "pointermove", { pointerId: 9, clientX: 100, clientY: 160 });
+
+    expect(raf.request).toHaveBeenCalledTimes(1);
+    expect(raf.pending()).toBe(1);
+    dispatchPointer(window, "pointerup", { pointerId: 9, clientX: 267, clientY: 164 });
+
+    expect(raf.cancel).toHaveBeenCalledTimes(1);
+    expect(raf.pending()).toBe(0);
+    expect(fixture.sound.classList.contains("is-home-selected")).toBe(true);
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(1);
+    controller.destroy();
+  });
+
+  it("updates panel optics and deforms a clamped candidate lobe without rotation", () => {
+    const fixture = createFixture();
+    const raf = installRafQueue();
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 10,
+      clientX: 155,
+      clientY: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 10,
+      clientX: 90,
+      clientY: 164,
+    });
+    raf.flush();
+
+    const glassX = fixture.panel.style.getPropertyValue("--glass-x");
+    const glassY = fixture.panel.style.getPropertyValue("--glass-y");
+    const glassDx = fixture.panel.style.getPropertyValue("--glass-dx");
+    const glassDy = fixture.panel.style.getPropertyValue("--glass-dy");
+    expect(glassX).toMatch(/^-?\d+(\.\d+)?%$/);
+    expect(glassY).toMatch(/^-?\d+(\.\d+)?%$/);
+    expect([glassX, glassY, glassDx, glassDy].every((value) => Number.isFinite(
+      Number.parseFloat(value),
+    ))).toBe(true);
+    expect(fixture.select.classList.contains("is-home-candidate")).toBe(true);
+    expect(fixture.indicator.style.width).toBe("130px");
+    expect(fixture.indicator.style.height).toBe("58px");
+    expect(fixture.indicator.style.transform).toContain("scale(");
+    expect(fixture.indicator.style.transform).not.toContain("rotate");
+    expect(Number.parseFloat(fixture.indicator.style.left)
+      - Number.parseFloat(fixture.indicator.style.width) / 2).toBeGreaterThanOrEqual(6);
+    expect(Number.parseFloat(fixture.indicator.style.top)
+      + Number.parseFloat(fixture.indicator.style.height) / 2).toBeLessThanOrEqual(184);
+
+    dispatchPointer(window, "pointercancel", { pointerId: 10 });
+    controller.destroy();
+  });
+
+  it("settles a completed drag over 420ms with no rotation keyframes", () => {
+    const fixture = createFixture();
+    const animate = vi.fn(() => ({ cancel: vi.fn() }) as unknown as Animation);
+    Object.defineProperty(fixture.indicator, "animate", {
+      configurable: true,
+      value: animate,
+    });
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+    dispatchPointer(fixture.play, "pointerdown", {
+      pointerId: 11,
+      clientX: 155,
+      clientY: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 11,
+      clientX: 267,
+      clientY: 164,
+    });
+    dispatchPointer(window, "pointerup", {
+      pointerId: 11,
+      clientX: 267,
+      clientY: 164,
+    });
+
+    expect(animate).toHaveBeenCalledTimes(1);
+    const [keyframes, options] = animate.mock.calls[0] as unknown as [
+      Keyframe[],
+      KeyframeAnimationOptions,
+    ];
+    expect(options).toMatchObject({
+      duration: 420,
+      easing: "cubic-bezier(.16,1,.3,1)",
+      fill: "forwards",
+    });
+    expect(JSON.stringify(keyframes)).not.toContain("rotate");
+    controller.destroy();
+  });
+
+  it("removes active window listeners after pointer end and destroy", () => {
+    const fixture = createFixture();
+    const addWindowListener = vi.spyOn(window, "addEventListener");
+    const removeWindowListener = vi.spyOn(window, "removeEventListener");
+    const addDocumentListener = vi.spyOn(document, "addEventListener");
+    const removeDocumentListener = vi.spyOn(document, "removeEventListener");
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 12,
+      clientX: 155,
+      clientY: 100,
+    });
+
+    for (const type of ["pointermove", "pointerup", "pointercancel", "blur"]) {
+      expect(addWindowListener.mock.calls.some(([actual]) => actual === type)).toBe(true);
+    }
+    expect(addDocumentListener.mock.calls.some(([actual]) => actual === "visibilitychange")).toBe(true);
+    dispatchPointer(window, "pointermove", { pointerId: 12, clientX: 267, clientY: 164 });
+    dispatchPointer(window, "pointerup", { pointerId: 12, clientX: 267, clientY: 164 });
+
+    for (const type of ["pointermove", "pointerup", "pointercancel", "blur"]) {
+      expect(removeWindowListener.mock.calls.some(([actual]) => actual === type)).toBe(true);
+    }
+    expect(removeDocumentListener.mock.calls.some(
+      ([actual]) => actual === "visibilitychange",
+    )).toBe(true);
+    const leftAfterEnd = fixture.indicator.style.left;
+    dispatchPointer(window, "pointermove", { pointerId: 12, clientX: 20, clientY: 20 });
+    vi.runOnlyPendingTimers();
+    expect(fixture.indicator.style.left).toBe(leftAfterEnd);
+
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 13,
+      clientX: 267,
+      clientY: 164,
+    });
+    controller.destroy();
+    const leftAfterDestroy = fixture.indicator.style.left;
+    dispatchPointer(window, "pointermove", { pointerId: 13, clientX: 20, clientY: 20 });
+    vi.runAllTimers();
+    expect(fixture.indicator.style.left).toBe(leftAfterDestroy);
+    expect(removeWindowListener.mock.calls.filter(([actual]) => actual === "pointermove")).toHaveLength(2);
+    expect(removeDocumentListener.mock.calls.filter(
+      ([actual]) => actual === "visibilitychange",
+    )).toHaveLength(2);
+  });
+
+  it("interrupts an active drag on resize and ignores its stale pointerup", () => {
+    const fixture = createFixture();
+    const removeWindowListener = vi.spyOn(window, "removeEventListener");
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 15,
+      clientX: 155,
+      clientY: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 15,
+      clientX: 267,
+      clientY: 164,
+    });
+
+    window.dispatchEvent(new Event("resize"));
+    dispatchPointer(window, "pointerup", {
+      pointerId: 15,
+      clientX: 267,
+      clientY: 164,
+    });
+    vi.runAllTimers();
+
+    expect(removeWindowListener.mock.calls.some(([type]) => type === "pointermove")).toBe(true);
+    expect(fixture.play.classList.contains("is-home-selected")).toBe(true);
+    expect(fixture.indicator.style.left).toBe("145px");
+    expect(fixture.soundActivate).not.toHaveBeenCalled();
+    controller.destroy();
+  });
+
+  it("suppresses compatibility clicks for 420ms but preserves detail-zero clicks", () => {
+    const fixture = createFixture();
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 14,
+      clientX: 155,
+      clientY: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 14,
+      clientX: 267,
+      clientY: 164,
+    });
+    dispatchPointer(window, "pointerup", {
+      pointerId: 14,
+      clientX: 267,
+      clientY: 164,
+    });
+
+    const immediateClick = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    fixture.sound.dispatchEvent(immediateClick);
+    expect(immediateClick.defaultPrevented).toBe(true);
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(1);
+
+    fixture.sound.click();
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(419);
+    fixture.sound.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(1);
+    fixture.sound.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(3);
+    controller.destroy();
   });
 
   it("rejects a panel whose document has no owner window", () => {
