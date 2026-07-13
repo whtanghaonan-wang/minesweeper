@@ -962,6 +962,48 @@ describe("installHomeLiquidSelection", () => {
     controller.destroy();
   });
 
+  it("lets an immediate transparency click replace a pending selected-sound compatibility click", () => {
+    const fixture = createFixture();
+    const transparency = document.createElement("button");
+    transparency.textContent = "Transparency";
+    fixture.panel.append(transparency);
+    setRect(transparency, rect(165, 140, 64, 48));
+    const transparencyActivate = vi.fn();
+    const targets: HomeLiquidTarget[] = [
+      ...fixture.targets,
+      { button: transparency, kind: "instant", activate: transparencyActivate },
+    ];
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      targets,
+      fixture.sound,
+    );
+
+    dispatchPointer(fixture.sound, "pointerdown", {
+      pointerId: 52,
+      clientX: 267,
+      clientY: 164,
+    });
+    dispatchPointer(fixture.sound, "pointerup", {
+      pointerId: 52,
+      clientX: 267,
+      clientY: 164,
+    });
+    const transparencyClick = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    transparency.dispatchEvent(transparencyClick);
+
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(1);
+    expect(transparencyClick.defaultPrevented).toBe(false);
+    expect(transparency.classList.contains("is-home-selected")).toBe(true);
+    expect(transparencyActivate).toHaveBeenCalledTimes(1);
+    controller.destroy();
+  });
+
   it("preserves detail-zero keyboard clicks during stationary-tap suppression", () => {
     const fixture = createFixture();
     Object.defineProperties(fixture.panel, {
@@ -1845,7 +1887,7 @@ describe("installHomeLiquidSelection", () => {
     controller.destroy();
   });
 
-  it("suppresses compatibility clicks for 420ms but preserves detail-zero clicks", () => {
+  it("consumes a moved drag compatibility click once and clears suppression immediately", () => {
     const fixture = createFixture();
     const controller = installHomeLiquidSelection(
       fixture.panel,
@@ -1874,18 +1916,67 @@ describe("installHomeLiquidSelection", () => {
       cancelable: true,
       detail: 1,
     });
-    fixture.sound.dispatchEvent(immediateClick);
+    fixture.panel.dispatchEvent(immediateClick);
     expect(immediateClick.defaultPrevented).toBe(true);
     expect(fixture.soundActivate).toHaveBeenCalledTimes(1);
 
     fixture.sound.click();
     expect(fixture.soundActivate).toHaveBeenCalledTimes(2);
-    vi.advanceTimersByTime(419);
-    fixture.sound.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
-    expect(fixture.soundActivate).toHaveBeenCalledTimes(2);
-    vi.advanceTimersByTime(1);
     fixture.sound.dispatchEvent(new MouseEvent("click", { bubbles: true, detail: 1 }));
     expect(fixture.soundActivate).toHaveBeenCalledTimes(3);
+    controller.destroy();
+  });
+
+  it("keeps detail-zero clicks live while the timer remains a delayed-click fallback", () => {
+    const fixture = createFixture();
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.sound,
+    );
+    dispatchPointer(fixture.sound, "pointerdown", {
+      pointerId: 15,
+      clientX: 267,
+      clientY: 164,
+    });
+    dispatchPointer(fixture.sound, "pointerup", {
+      pointerId: 15,
+      clientX: 267,
+      clientY: 164,
+    });
+
+    fixture.sound.click();
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(419);
+    const beforeExpiry = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    fixture.sound.dispatchEvent(beforeExpiry);
+    expect(beforeExpiry.defaultPrevented).toBe(true);
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(2);
+
+    dispatchPointer(fixture.sound, "pointerdown", {
+      pointerId: 16,
+      clientX: 267,
+      clientY: 164,
+    });
+    dispatchPointer(fixture.sound, "pointerup", {
+      pointerId: 16,
+      clientX: 267,
+      clientY: 164,
+    });
+    vi.advanceTimersByTime(420);
+    const afterExpiry = new MouseEvent("click", {
+      bubbles: true,
+      cancelable: true,
+      detail: 1,
+    });
+    fixture.sound.dispatchEvent(afterExpiry);
+    expect(afterExpiry.defaultPrevented).toBe(false);
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(4);
     controller.destroy();
   });
 

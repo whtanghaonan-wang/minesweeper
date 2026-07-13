@@ -68,6 +68,11 @@ interface ActiveDrag {
   captured: boolean;
 }
 
+interface CompatibilityClickSuppression {
+  target: HomeLiquidTarget;
+  resetId: number | undefined;
+}
+
 interface MagneticTarget {
   target: HomeLiquidTarget;
   geometry: TargetGeometry;
@@ -210,12 +215,11 @@ export function installHomeLiquidSelection(
   let currentGeometry: TargetGeometry | null = null;
   let currentLayoutAvailable = false;
   let pendingActivation: number | undefined;
-  let pendingCompatibilityReset: number | undefined;
   let activeAnimation: Animation | null = null;
   let activeDrag: ActiveDrag | null = null;
   let activeListenersInstalled = false;
   let layoutObserver: ResizeObserver | null = null;
-  let compatibilityClickSuppressed = false;
+  let compatibilityClickSuppression: CompatibilityClickSuppression | null = null;
   let destroyed = false;
 
   const cancelPendingActivation = (): void => {
@@ -311,20 +315,23 @@ export function installHomeLiquidSelection(
     }
   };
 
-  const clearCompatibilitySuppression = (): void => {
-    if (pendingCompatibilityReset !== undefined) {
-      ownerWindow.clearTimeout(pendingCompatibilityReset);
-      pendingCompatibilityReset = undefined;
-    }
-    compatibilityClickSuppressed = false;
+  const clearCompatibilitySuppression = (
+    expected: CompatibilityClickSuppression | null = compatibilityClickSuppression,
+  ): void => {
+    if (!expected || compatibilityClickSuppression !== expected) return;
+    compatibilityClickSuppression = null;
+    if (expected.resetId !== undefined) ownerWindow.clearTimeout(expected.resetId);
+    expected.resetId = undefined;
   };
 
-  const suppressCompatibilityClicks = (): void => {
+  const suppressCompatibilityClick = (target: HomeLiquidTarget): void => {
     clearCompatibilitySuppression();
-    compatibilityClickSuppressed = true;
-    pendingCompatibilityReset = ownerWindow.setTimeout(() => {
-      pendingCompatibilityReset = undefined;
-      compatibilityClickSuppressed = false;
+    const suppression: CompatibilityClickSuppression = { target, resetId: undefined };
+    compatibilityClickSuppression = suppression;
+    suppression.resetId = ownerWindow.setTimeout(() => {
+      if (compatibilityClickSuppression !== suppression) return;
+      suppression.resetId = undefined;
+      compatibilityClickSuppression = null;
     }, DRAG_SETTLE_MS);
   };
 
@@ -637,13 +644,12 @@ export function installHomeLiquidSelection(
         && pressedTarget.button.isConnected
         && !pressedTarget.button.disabled
       ) {
-        suppressCompatibilityClicks();
+        suppressCompatibilityClick(pressedTarget);
         pressedTarget.activate();
       }
       return;
     }
 
-    suppressCompatibilityClicks();
     if (
       moved
       && candidate
@@ -653,9 +659,11 @@ export function installHomeLiquidSelection(
       cancelPendingActivation();
       markSelected(candidate);
       moveIndicator(candidate.button, true, DRAG_SETTLE_MS);
+      suppressCompatibilityClick(candidate);
       activateSelectedTarget(candidate);
       return;
     }
+    suppressCompatibilityClick(selectedTarget);
     moveIndicator(selectedTarget.button, true, DRAG_SETTLE_MS);
   }
 
@@ -735,13 +743,18 @@ export function installHomeLiquidSelection(
 
   const onClick = (event: Event): void => {
     if (destroyed) return;
-    if (compatibilityClickSuppressed && (event as MouseEvent).detail !== 0) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      return;
-    }
     if (!(event.target instanceof ownerWindow.Node)) return;
     const target = targets.find((candidate) => candidate.button.contains(event.target as Node));
+    const suppression = compatibilityClickSuppression;
+    if (suppression && (event as MouseEvent).detail !== 0) {
+      if (!target || target === suppression.target) {
+        clearCompatibilitySuppression(suppression);
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
+      clearCompatibilitySuppression(suppression);
+    }
     if (!target || target.button.disabled) return;
 
     cancelPendingActivation();
