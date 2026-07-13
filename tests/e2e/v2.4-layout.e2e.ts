@@ -3,6 +3,9 @@ import { expect, test, type Page } from "@playwright/test";
 type Rect = { x: number; y: number; width: number; height: number };
 
 const EPSILON = 1;
+const LIQUID_GEOMETRY_TOLERANCE = 2;
+const LIQUID_TARGET_PADDING = 5;
+const LIQUID_MIN_SIZE = 48;
 const HOME_CONTENT = [
   ".home-liquid-selection",
   ".home-stats",
@@ -69,6 +72,48 @@ async function expectTouchTargets(page: Page): Promise<void> {
     expect(box!.width).toBeGreaterThanOrEqual(44);
     expect(box!.height).toBeGreaterThanOrEqual(44);
   }
+}
+
+async function expectLiquidCoversSelectedTarget(page: Page): Promise<void> {
+  await expect.poll(async () => {
+    const liquid = await page.locator(".home-liquid-selection").boundingBox();
+    const target = await page.locator(".is-home-selected").boundingBox();
+    if (!liquid || !target) return null;
+    const expectedWidth = Math.max(
+      LIQUID_MIN_SIZE,
+      target.width + LIQUID_TARGET_PADDING * 2,
+    );
+    const expectedHeight = Math.max(
+      LIQUID_MIN_SIZE,
+      target.height + LIQUID_TARGET_PADDING * 2,
+    );
+    return {
+      centerX: Math.abs(
+        liquid.x + liquid.width / 2 - target.x - target.width / 2,
+      ) <= LIQUID_GEOMETRY_TOLERANCE,
+      centerY: Math.abs(
+        liquid.y + liquid.height / 2 - target.y - target.height / 2,
+      ) <= LIQUID_GEOMETRY_TOLERANCE,
+      width: Math.abs(liquid.width - expectedWidth) <= LIQUID_GEOMETRY_TOLERANCE,
+      height: Math.abs(liquid.height - expectedHeight) <= LIQUID_GEOMETRY_TOLERANCE,
+      coversLeft: liquid.x <= target.x - LIQUID_TARGET_PADDING + LIQUID_GEOMETRY_TOLERANCE,
+      coversRight: liquid.x + liquid.width >= target.x + target.width
+        + LIQUID_TARGET_PADDING - LIQUID_GEOMETRY_TOLERANCE,
+      coversTop: liquid.y <= target.y - LIQUID_TARGET_PADDING + LIQUID_GEOMETRY_TOLERANCE,
+      coversBottom: liquid.y + liquid.height >= target.y + target.height
+        + LIQUID_TARGET_PADDING - LIQUID_GEOMETRY_TOLERANCE,
+    };
+  }, { message: "liquid lobe should settle around the selected target with 5px padding" })
+    .toEqual({
+      centerX: true,
+      centerY: true,
+      width: true,
+      height: true,
+      coversLeft: true,
+      coversRight: true,
+      coversTop: true,
+      coversBottom: true,
+    });
 }
 
 async function dragHomeLiquid(
@@ -222,6 +267,24 @@ test("默认开始按钮可单击且已选中的即时按钮可重复执行", as
   await sound.click();
   await expect(sound).toHaveAttribute("aria-label", originalLabel!);
   await expect(sound).toHaveClass(/is-home-selected/);
+});
+
+test("已选声音轻点后立即点击玻璃按钮不会被旧兼容点击吞掉", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const sound = page.locator(".sound-btn");
+  const transparency = page.locator(".transparency-btn");
+  await sound.click({ force: true });
+  await expect(sound).toHaveClass(/is-home-selected/);
+
+  const soundBefore = await sound.getAttribute("aria-label");
+  const transparencyBefore = await transparency.getAttribute("aria-pressed");
+  await sound.click({ force: true });
+  await transparency.click({ force: true });
+
+  await expect(sound).not.toHaveAttribute("aria-label", soundBefore!);
+  await expect(transparency).toHaveClass(/is-home-selected/);
+  await expect(transparency).not.toHaveAttribute("aria-pressed", transparencyBefore!);
 });
 
 test("小胶囊边缘可连续拖拽 20 次且不会残留拖拽状态", async ({ page }) => {
@@ -385,6 +448,7 @@ for (const width of [320, 360, 361, 370, 390, 420]) {
     await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
     const stats = (await page.locator(".home-stats").boundingBox())!;
     expect(stats.width).toBeGreaterThan(0);
+    await expectLiquidCoversSelectedTarget(page);
     await expectHomeContentInsidePanel(page);
     await expectStatsAndToolsSeparate(page);
     await expectTouchTargets(page);
