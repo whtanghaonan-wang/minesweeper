@@ -59,20 +59,32 @@ function measureTarget(
     ];
     if (!values.every(Number.isFinite)) return null;
 
-    const width = Math.max(MIN_TARGET_PX, targetRect.width + TARGET_PADDING_PX * 2);
-    const height = Math.max(MIN_TARGET_PX, targetRect.height + TARGET_PADDING_PX * 2);
-    const targetCenterX = targetRect.left + targetRect.width / 2 - panelRect.left;
-    const targetCenterY = targetRect.top + targetRect.height / 2 - panelRect.top;
+    const hasClientWidth = panel.clientWidth > 0;
+    const hasClientHeight = panel.clientHeight > 0;
+    const panelWidth = hasClientWidth ? panel.clientWidth : panelRect.width;
+    const panelHeight = hasClientHeight ? panel.clientHeight : panelRect.height;
+    const panelLeft = panelRect.left + (hasClientWidth ? panel.clientLeft : 0);
+    const panelTop = panelRect.top + (hasClientHeight ? panel.clientTop : 0);
+    const desiredWidth = Math.max(MIN_TARGET_PX, targetRect.width + TARGET_PADDING_PX * 2);
+    const desiredHeight = Math.max(MIN_TARGET_PX, targetRect.height + TARGET_PADDING_PX * 2);
+    const width = panelWidth > 0
+      ? Math.min(desiredWidth, Math.max(0, panelWidth - PANEL_SAFETY_PX * 2))
+      : desiredWidth;
+    const height = panelHeight > 0
+      ? Math.min(desiredHeight, Math.max(0, panelHeight - PANEL_SAFETY_PX * 2))
+      : desiredHeight;
+    const targetCenterX = targetRect.left + targetRect.width / 2 - panelLeft;
+    const targetCenterY = targetRect.top + targetRect.height / 2 - panelTop;
 
     return {
       geometry: {
-        left: clampCenter(targetCenterX, width, panelRect.width),
-        top: clampCenter(targetCenterY, height, panelRect.height),
+        left: clampCenter(targetCenterX, width, panelWidth),
+        top: clampCenter(targetCenterY, height, panelHeight),
         width,
         height,
       },
-      layoutAvailable: panelRect.width > 0
-        && panelRect.height > 0
+      layoutAvailable: panelWidth > 0
+        && panelHeight > 0
         && targetRect.width > 0
         && targetRect.height > 0,
     };
@@ -128,16 +140,19 @@ export function installHomeLiquidSelection(
   }
 
   const ownerWindow = panel.ownerDocument.defaultView;
+  if (!ownerWindow) {
+    throw new Error("Home liquid selection requires an owner window");
+  }
   let selectedTarget = initialTarget;
   let currentGeometry: TargetGeometry | null = null;
   let currentLayoutAvailable = false;
-  let pendingActivation: ReturnType<typeof setTimeout> | undefined;
+  let pendingActivation: number | undefined;
   let activeAnimation: Animation | null = null;
   let destroyed = false;
 
   const cancelPendingActivation = (): void => {
     if (pendingActivation === undefined) return;
-    clearTimeout(pendingActivation);
+    ownerWindow.clearTimeout(pendingActivation);
     pendingActivation = undefined;
   };
 
@@ -163,7 +178,7 @@ export function installHomeLiquidSelection(
     cancelAnimation();
     applyGeometry(indicator, nextGeometry);
 
-    if (!animate || !previousGeometry || !layoutAvailable || !ownerWindow) return;
+    if (!animate || !previousGeometry || !layoutAvailable) return;
     const matchMedia = ownerWindow.matchMedia;
     if (typeof matchMedia !== "function" || matchMedia.call(
       ownerWindow,
@@ -183,6 +198,7 @@ export function installHomeLiquidSelection(
         {
           duration: CLICK_DURATION_MS,
           easing: "cubic-bezier(.16,1,.3,1)",
+          fill: "forwards",
         },
       );
     } catch {
@@ -198,14 +214,19 @@ export function installHomeLiquidSelection(
   };
 
   const activateAfterNavigationDelay = (target: HomeLiquidTarget): void => {
-    pendingActivation = setTimeout(() => {
+    pendingActivation = ownerWindow.setTimeout(() => {
       pendingActivation = undefined;
-      if (!destroyed && selectedTarget === target) target.activate();
+      if (
+        !destroyed
+        && selectedTarget === target
+        && target.button.isConnected
+        && !target.button.disabled
+      ) target.activate();
     }, NAVIGATION_DELAY_MS);
   };
 
   const onClick = (event: Event): void => {
-    if (destroyed || !(event.target instanceof Node)) return;
+    if (destroyed || !(event.target instanceof ownerWindow.Node)) return;
     const target = targets.find((candidate) => candidate.button.contains(event.target as Node));
     if (!target || target.button.disabled) return;
 
@@ -232,7 +253,7 @@ export function installHomeLiquidSelection(
   markSelected(initialTarget);
   moveIndicator(initialTarget.button, false);
   panel.addEventListener("click", onClick);
-  ownerWindow?.addEventListener("resize", onResize);
+  ownerWindow.addEventListener("resize", onResize);
 
   return {
     destroy(): void {
@@ -241,7 +262,7 @@ export function installHomeLiquidSelection(
       cancelPendingActivation();
       cancelAnimation();
       panel.removeEventListener("click", onClick);
-      ownerWindow?.removeEventListener("resize", onResize);
+      ownerWindow.removeEventListener("resize", onResize);
       for (const target of targets) {
         target.button.classList.remove("is-home-selected", "is-home-candidate");
       }
