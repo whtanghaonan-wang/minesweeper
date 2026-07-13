@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, copyFileSync, writeFileSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync, copyFileSync, writeFileSync, readFileSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
-import { basename, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 
 const root = resolve(process.cwd());
 const expectedVersion = "2.4.0";
@@ -21,6 +21,31 @@ function requireEnvironment(name) {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`Missing required environment variable: ${name}`);
   return value;
+}
+
+function readSigningProperties() {
+  const propertiesPath = resolve(root, "src-tauri/gen/android/keystore.properties");
+  if (!existsSync(propertiesPath)) {
+    throw new Error("Signing properties precondition failed: keystore.properties is missing");
+  }
+  const properties = {};
+  for (const line of readFileSync(propertiesPath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith("!")) continue;
+    const separator = trimmed.indexOf("=");
+    if (separator < 1) continue;
+    properties[trimmed.slice(0, separator).trim()] = trimmed.slice(separator + 1).trim();
+  }
+  for (const field of ["storeFile", "password", "keyAlias"]) {
+    if (!properties[field]) throw new Error(`Signing properties precondition failed: ${field} is missing`);
+  }
+  const keystorePath = isAbsolute(properties.storeFile)
+    ? resolve(properties.storeFile)
+    : resolve(dirname(propertiesPath), properties.storeFile);
+  if (!existsSync(keystorePath) || !statSync(keystorePath).isFile()) {
+    throw new Error("Signing properties precondition failed: keystore file not found");
+  }
+  return { propertiesPath, keystorePath };
 }
 
 function readJson(path) {
@@ -144,7 +169,7 @@ function main() {
   const artifactsRoot = resolve(root, "artifacts");
   const outputDir = resolve(root, argumentValue("--output-dir", "artifacts/android"));
   const outputRelative = relative(artifactsRoot, outputDir);
-  if (!outputRelative || outputRelative.startsWith(`..${sep}`) || isAbsolute(outputRelative)) {
+  if (!outputRelative || outputRelative === ".." || outputRelative.startsWith(`..${sep}`) || isAbsolute(outputRelative)) {
     throw new Error("OutputDir must be a child of artifacts");
   }
 
@@ -160,6 +185,7 @@ function main() {
   const androidHome = requireEnvironment("ANDROID_HOME");
   requireEnvironment("NDK_HOME");
   const expectedFingerprint = normalizeFingerprint(requireEnvironment("ANDROID_CERT_SHA256"));
+  readSigningProperties();
   const apksigner = resolveBuildTool(androidHome, "apksigner");
   const aapt = resolveBuildTool(androidHome, "aapt");
   if (!existsSync(javaHome)) throw new Error(`JAVA_HOME path does not exist: ${javaHome}`);

@@ -17,4 +17,15 @@ describe("android-release.mjs contract", () => {
     expect(source).not.toContain("ANDROID_KEY_PASSWORD}");
     expect(source).not.toContain("console.log(process.env");
   });
+
+  it("checks signing properties before creating artifacts or building", () => {
+    for (const required of [
+      "keystore.properties", "storeFile", "password", "keyAlias",
+      "Signing properties precondition",
+    ]) expect(source).toContain(required);
+  });
+
+  it("rejects the artifacts parent itself as an output directory", () => {
+    expect(source).toContain('outputRelative === ".."');
+  });
 });
