@@ -1708,9 +1708,80 @@ describe("installHomeLiquidSelection", () => {
     controller.destroy();
   });
 
+  it("updates optics for enabled unselected targets without capture and ignores disabled or unrelated presses", () => {
+    const fixture = createFixture();
+    const transparency = document.createElement("button");
+    transparency.textContent = "Transparency";
+    fixture.panel.append(transparency);
+    setRect(transparency, rect(165, 140, 64, 48));
+    const transparencyActivate = vi.fn();
+    const targets: HomeLiquidTarget[] = [
+      ...fixture.targets,
+      { button: transparency, kind: "instant", activate: transparencyActivate },
+    ];
+    const setPointerCapture = vi.fn();
+    Object.defineProperty(fixture.panel, "setPointerCapture", {
+      configurable: true,
+      value: setPointerCapture,
+    });
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      targets,
+      fixture.play,
+    );
+    const readOptics = (): string[] => [
+      "--glass-x",
+      "--glass-y",
+      "--glass-dx",
+      "--glass-dy",
+    ].map((property) => fixture.panel.style.getPropertyValue(property));
+
+    dispatchPointer(fixture.sound, "pointerdown", {
+      pointerId: 131,
+      clientX: 250,
+      clientY: 150,
+    });
+    const soundOptics = readOptics();
+    expect(soundOptics.every((value) => value !== "" && Number.isFinite(
+      Number.parseFloat(value),
+    ))).toBe(true);
+    expect(setPointerCapture).not.toHaveBeenCalled();
+    expect(fixture.panel.classList.contains("is-home-liquid-dragging")).toBe(false);
+
+    dispatchPointer(transparency, "pointerdown", {
+      pointerId: 132,
+      clientX: 180,
+      clientY: 170,
+    });
+    const transparencyOptics = readOptics();
+    expect(transparencyOptics.every((value, index) => value !== soundOptics[index])).toBe(true);
+    expect(transparencyOptics.every((value) => Number.isFinite(Number.parseFloat(value)))).toBe(true);
+    expect(setPointerCapture).not.toHaveBeenCalled();
+    expect(fixture.panel.classList.contains("is-home-liquid-dragging")).toBe(false);
+
+    transparency.disabled = true;
+    dispatchPointer(transparency, "pointerdown", {
+      pointerId: 133,
+      clientX: 200,
+      clientY: 160,
+    });
+    expect(readOptics()).toEqual(transparencyOptics);
+    dispatchPointer(fixture.panel, "pointerdown", {
+      pointerId: 134,
+      clientX: 20,
+      clientY: 30,
+    });
+    expect(readOptics()).toEqual(transparencyOptics);
+    expect(setPointerCapture).not.toHaveBeenCalled();
+    expect(fixture.panel.classList.contains("is-home-liquid-dragging")).toBe(false);
+    controller.destroy();
+  });
+
   it("updates panel optics and deforms a clamped candidate lobe without rotation", () => {
     const fixture = createFixture();
     const raf = installRafQueue();
+    const setProperty = vi.spyOn(fixture.panel.style, "setProperty");
     const controller = installHomeLiquidSelection(
       fixture.panel,
       fixture.indicator,
@@ -1722,12 +1793,14 @@ describe("installHomeLiquidSelection", () => {
       clientX: 155,
       clientY: 100,
     });
+    expect(setProperty).toHaveBeenCalledTimes(4);
     dispatchPointer(window, "pointermove", {
       pointerId: 10,
       clientX: 90,
       clientY: 164,
     });
     raf.flush();
+    expect(setProperty).toHaveBeenCalledTimes(8);
 
     const glassX = fixture.panel.style.getPropertyValue("--glass-x");
     const glassY = fixture.panel.style.getPropertyValue("--glass-y");

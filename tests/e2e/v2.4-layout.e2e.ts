@@ -252,6 +252,65 @@ test("首页只有一团选中玻璃且所有空闲按钮透明", async ({ page 
   expect(opacity).toBeGreaterThan(0);
 });
 
+test("未选声音按钮按下时先更新玻璃光学且仍只走原生单击", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const panel = page.locator(".home-panel");
+  const sound = page.locator(".sound-btn");
+  const beforeLabel = await sound.getAttribute("aria-label");
+  const expectedLabel = beforeLabel === "关闭音效" ? "开启音效" : "关闭音效";
+  const before = await panel.evaluate((element) => [
+    "--glass-x",
+    "--glass-y",
+    "--glass-dx",
+    "--glass-dy",
+  ].map((property) => (element as HTMLElement).style.getPropertyValue(property)));
+  const soundBox = await sound.boundingBox();
+  expect(soundBox).not.toBeNull();
+  const point = {
+    x: soundBox!.x + soundBox!.width * 0.31,
+    y: soundBox!.y + soundBox!.height * 0.67,
+  };
+  const panelBox = await panel.evaluate((element) => {
+    const html = element as HTMLElement;
+    const bounds = html.getBoundingClientRect();
+    return {
+      left: bounds.left + html.clientLeft,
+      top: bounds.top + html.clientTop,
+      width: html.clientWidth,
+      height: html.clientHeight,
+    };
+  });
+  const normalizedX = Math.max(0, Math.min(1, (point.x - panelBox.left) / panelBox.width));
+  const normalizedY = Math.max(0, Math.min(1, (point.y - panelBox.top) / panelBox.height));
+
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  const during = await panel.evaluate((element) => [
+    "--glass-x",
+    "--glass-y",
+    "--glass-dx",
+    "--glass-dy",
+  ].map((property) => (element as HTMLElement).style.getPropertyValue(property)));
+
+  expect(during.every((value) => value !== "" && Number.isFinite(Number.parseFloat(value))))
+    .toBe(true);
+  expect(during.every((value, index) => value !== before[index])).toBe(true);
+  expect(Math.abs(Number.parseFloat(during[0]!) - normalizedX * 100)).toBeLessThanOrEqual(1);
+  expect(Math.abs(Number.parseFloat(during[1]!) - normalizedY * 100)).toBeLessThanOrEqual(1);
+  expect(Math.abs(Number.parseFloat(during[2]!) - (normalizedX - 0.5) * 2))
+    .toBeLessThanOrEqual(0.02);
+  expect(Math.abs(Number.parseFloat(during[3]!) - (normalizedY - 0.5) * 2))
+    .toBeLessThanOrEqual(0.02);
+  await expect(panel).not.toHaveClass(/is-home-liquid-dragging/);
+  await expect(sound).not.toHaveClass(/is-home-selected/);
+  expect(await panel.evaluate((element) => element.hasPointerCapture?.(1) ?? false)).toBe(false);
+
+  await page.mouse.up();
+  await expect(sound).toHaveClass(/is-home-selected/);
+  await expect(sound).toHaveAttribute("aria-label", expectedLabel);
+});
+
 test("默认开始按钮可单击且已选中的即时按钮可重复执行", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/");

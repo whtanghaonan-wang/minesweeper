@@ -705,7 +705,13 @@ export function installHomeLiquidSelection(
       || !Number.isFinite(pointer.clientY)
     ) return;
     const source = event.target as Node;
-    if (!indicator.contains(source) && !selectedTarget.button.contains(source)) return;
+    const sourceTarget = targets.find((target) => target.button.contains(source));
+    const sourceIsIndicator = indicator.contains(source);
+    if (!sourceIsIndicator && (!sourceTarget || sourceTarget.button.disabled)) return;
+
+    const box = measurePanelBox(panel);
+    if (box) writePanelOptics(pointer.clientX - box.left, pointer.clientY - box.top, box);
+    if (!sourceIsIndicator && sourceTarget !== selectedTarget) return;
 
     if (activeDrag) cancelActiveDrag(true);
     const originGeometry = measureTarget(panel, selectedTarget.button)?.geometry
@@ -735,10 +741,6 @@ export function installHomeLiquidSelection(
     clearCandidateClasses();
     installActiveListeners();
     acquirePointerCapture(session);
-    const box = measurePanelBox(panel);
-    if (box) {
-      writePanelOptics(pointer.clientX - box.left, pointer.clientY - box.top, box);
-    }
   }
 
   const onClick = (event: Event): void => {
