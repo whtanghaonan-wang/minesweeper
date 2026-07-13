@@ -4,8 +4,8 @@ import { resolve } from "node:path";
 const args = process.argv.slice(2);
 const mode = args[0];
 const androidVersionCode = (semver) => {
-  const match = /^(\d+)\.(\d+)\.(\d+)$/.exec(semver);
-  if (!match) throw new Error(`Android versionCode requires x.y.z version, got ${semver}`);
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d{0,2})\.(0|[1-9]\d{0,2})$/.exec(semver);
+  if (!match) throw new Error(`Android versionCode requires canonical x.y.z version, got ${semver}`);
   const [major, minor, patch] = match.slice(1).map(Number);
   const code = major * 1_000_000 + minor * 1_000 + patch;
   if (!Number.isSafeInteger(code) || code < 1 || code > 2_100_000_000) {

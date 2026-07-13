@@ -92,4 +92,11 @@ describe("version.mjs", () => {
     expect(sync.status).toBe(0);
     expect(run().status).toBe(0);
   });
+
+  it.each(["02.4.0", "2.1000.0", "2.4.1000"])("拒绝会造成 Android versionCode 歧义的版本 %s", (version) => {
+    writeJson("package.json", { name: "minesweeper", version });
+    const result = run();
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("Android versionCode requires canonical x.y.z version");
+  });
 });
