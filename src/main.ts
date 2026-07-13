@@ -46,8 +46,10 @@ function leaveHome(): void {
 }
 
 window.addEventListener("pagehide", (event) => {
-  if (event.persisted) liquidGlass.cancelAll();
-  else {
+  if (event.persisted) {
+    homeView?.cancelAll();
+    liquidGlass.cancelAll();
+  } else {
     leaveHome();
     liquidGlass.destroy();
   }

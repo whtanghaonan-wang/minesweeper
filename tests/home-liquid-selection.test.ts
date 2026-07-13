@@ -480,6 +480,30 @@ describe("installHomeLiquidSelection", () => {
     controller.destroy();
   });
 
+  it("cancelAll cancels delayed navigation without unmounting the controller", () => {
+    const fixture = createFixture();
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.sound,
+    );
+
+    fixture.select.click();
+    controller.cancelAll();
+    vi.advanceTimersByTime(220);
+
+    expect(fixture.selectActivate).not.toHaveBeenCalled();
+    expect(fixture.select.classList.contains("is-home-selected")).toBe(true);
+    expect(fixture.indicator.style.left).toBe("80px");
+    expect(fixture.indicator.style.top).toBe("144px");
+
+    fixture.select.click();
+    expect(fixture.selectActivate).toHaveBeenCalledTimes(1);
+
+    controller.destroy();
+  });
+
   it("does not activate a navigation target detached before its delay expires", () => {
     const fixture = createFixture();
     const controller = installHomeLiquidSelection(

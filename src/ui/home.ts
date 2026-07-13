@@ -23,6 +23,7 @@ export interface HomeDeps {
 }
 
 export interface HomeViewController {
+  cancelAll(): void;
   destroy(): void;
 }
 
@@ -158,8 +159,8 @@ export function showHome(root: HTMLElement, deps: HomeDeps): HomeViewController 
 
   const targets: HomeLiquidTarget[] = [
     { button: playBtn, kind: "navigation", activate: () => deps.onContinue(target) },
-    { button: selBtn, kind: "navigation", activate: deps.onSelect },
-    { button: endlessBtn, kind: "navigation", activate: deps.onEndless },
+    { button: selBtn, kind: "navigation", activate: () => deps.onSelect() },
+    { button: endlessBtn, kind: "navigation", activate: () => deps.onEndless() },
     { button: soundBtn, kind: "instant", activate: toggleSound },
     { button: transparencyBtn, kind: "instant", activate: toggleTransparency },
   ];
@@ -170,7 +171,10 @@ export function showHome(root: HTMLElement, deps: HomeDeps): HomeViewController 
     playBtn,
   );
   title.focus();
-  return { destroy: () => liquidSelection.destroy() };
+  return {
+    cancelAll: () => liquidSelection.cancelAll(),
+    destroy: () => liquidSelection.destroy(),
+  };
 }
 
 /** 装饰藤蔓:自顶垂落,CSS 驱动生长动画(prefers-reduced-motion 时静态) */

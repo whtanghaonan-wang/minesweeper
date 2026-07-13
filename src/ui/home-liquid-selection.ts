@@ -7,6 +7,7 @@ export interface HomeLiquidTarget {
 }
 
 export interface HomeLiquidSelectionController {
+  cancelAll(): void;
   destroy(): void;
 }
 
@@ -725,19 +726,27 @@ export function installHomeLiquidSelection(
   panel.addEventListener("lostpointercapture", onLostPointerCapture);
   ownerWindow.addEventListener("resize", onResize);
 
+  const cancelAll = (): void => {
+    if (destroyed) return;
+    cancelActiveDrag(false);
+    cancelPendingActivation();
+    clearCompatibilitySuppression();
+    cancelAnimation();
+    clearCandidateClasses();
+    panel.classList.remove("is-home-liquid-dragging");
+    moveIndicator(selectedTarget.button, false);
+  };
+
   return {
+    cancelAll,
     destroy(): void {
       if (destroyed) return;
+      cancelAll();
       destroyed = true;
-      cancelActiveDrag(false);
-      cancelPendingActivation();
-      clearCompatibilitySuppression();
-      cancelAnimation();
       panel.removeEventListener("click", onClick);
       panel.removeEventListener("pointerdown", onPointerDown, true);
       panel.removeEventListener("lostpointercapture", onLostPointerCapture);
       ownerWindow.removeEventListener("resize", onResize);
-      panel.classList.remove("is-home-liquid-dragging");
       for (const target of targets) {
         target.button.classList.remove("is-home-selected", "is-home-candidate");
       }

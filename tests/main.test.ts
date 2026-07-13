@@ -15,6 +15,11 @@ import type { MenuDeps } from "../src/ui/menu";
 import type { ResultOptions } from "../src/ui/result";
 import type { UiPrefsStore } from "../src/ui/ui-prefs";
 
+interface HomeControllerHarness {
+  destroy: ReturnType<typeof vi.fn>;
+  cancelAll: ReturnType<typeof vi.fn>;
+}
+
 const h = vi.hoisted(() => ({
   storage: {
     load: vi.fn<() => SaveData>(),
@@ -26,7 +31,7 @@ const h = vi.hoisted(() => ({
   } satisfies GameStorage,
   createStorage: vi.fn(),
   showHome: vi.fn(),
-  destroyHomeView: vi.fn(),
+  homeControllers: [] as HomeControllerHarness[],
   showMenu: vi.fn(),
   showGame: vi.fn(),
   showResult: vi.fn(),
@@ -66,7 +71,9 @@ vi.mock("../src/ui/home", () => ({
   showHome: (root: HTMLElement, deps: HomeDeps) => {
     h.home = deps;
     h.showHome(root, deps);
-    return { destroy: h.destroyHomeView };
+    const controller = { destroy: vi.fn(), cancelAll: vi.fn() };
+    h.homeControllers.push(controller);
+    return controller;
   },
 }));
 vi.mock("../src/ui/menu", () => ({
@@ -140,7 +147,7 @@ beforeEach(() => {
   h.storage.recordEndlessLoss.mockReset();
   h.createStorage.mockReset();
   h.showHome.mockReset();
-  h.destroyHomeView.mockReset();
+  h.homeControllers.length = 0;
   h.showMenu.mockReset();
   h.showGame.mockReset();
   h.showResult.mockReset();
@@ -251,20 +258,31 @@ describe("应用壳持久化可靠性", () => {
   it("进入 BFCache 时仅取消动画，恢复后普通 pagehide 仍会销毁", async () => {
     await boot();
     expect(h.pagehideHandler).toBeTypeOf("function");
+    const firstHome = h.homeControllers[0]!;
 
     const cached = Object.assign(new Event("pagehide"), { persisted: true }) as PageTransitionEvent;
     h.pagehideHandler!(cached);
 
+    expect(firstHome.cancelAll).toHaveBeenCalledTimes(1);
     expect(h.cancelAllLiquidGlass).toHaveBeenCalledTimes(1);
     expect(h.destroyLiquidGlass).not.toHaveBeenCalled();
-    expect(h.destroyHomeView).not.toHaveBeenCalled();
+    expect(firstHome.destroy).not.toHaveBeenCalled();
+    expect(firstHome.cancelAll.mock.invocationCallOrder[0]).toBeLessThan(
+      h.cancelAllLiquidGlass.mock.invocationCallOrder[0]!,
+    );
+
+    h.home!.onSelect();
+    expect(firstHome.destroy).toHaveBeenCalledTimes(1);
+    h.menu!.onBack();
+    const secondHome = h.homeControllers[1]!;
 
     const leaving = Object.assign(new Event("pagehide"), { persisted: false }) as PageTransitionEvent;
     h.pagehideHandler!(leaving);
 
-    expect(h.destroyHomeView).toHaveBeenCalledTimes(1);
+    expect(secondHome.cancelAll).not.toHaveBeenCalled();
+    expect(secondHome.destroy).toHaveBeenCalledTimes(1);
     expect(h.destroyLiquidGlass).toHaveBeenCalledTimes(1);
-    expect(h.destroyHomeView.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(secondHome.destroy.mock.invocationCallOrder[0]).toBeLessThan(
       h.destroyLiquidGlass.mock.invocationCallOrder[0]!,
     );
   });
@@ -316,20 +334,24 @@ describe("应用壳持久化可靠性", () => {
 
   it("每个首页实例在离开路由前恰好销毁一次", async () => {
     await boot();
+    const firstHome = h.homeControllers[0]!;
 
     h.home!.onSelect();
-    expect(h.destroyHomeView).toHaveBeenCalledTimes(1);
-    expect(h.destroyHomeView.mock.invocationCallOrder[0]).toBeLessThan(
+    expect(firstHome.destroy).toHaveBeenCalledTimes(1);
+    expect(firstHome.destroy.mock.invocationCallOrder[0]).toBeLessThan(
       h.showMenu.mock.invocationCallOrder[0]!,
     );
 
     h.menu!.onBack();
+    const secondHome = h.homeControllers[1]!;
     expect(h.showHome).toHaveBeenCalledTimes(2);
-    expect(h.destroyHomeView).toHaveBeenCalledTimes(1);
+    expect(firstHome.destroy).toHaveBeenCalledTimes(1);
+    expect(secondHome.destroy).not.toHaveBeenCalled();
 
     h.home!.onContinue(campaignLevel);
-    expect(h.destroyHomeView).toHaveBeenCalledTimes(2);
-    expect(h.destroyHomeView.mock.invocationCallOrder[1]).toBeLessThan(
+    expect(firstHome.destroy).toHaveBeenCalledTimes(1);
+    expect(secondHome.destroy).toHaveBeenCalledTimes(1);
+    expect(secondHome.destroy.mock.invocationCallOrder[0]).toBeLessThan(
       h.showGame.mock.invocationCallOrder[0]!,
     );
   });
