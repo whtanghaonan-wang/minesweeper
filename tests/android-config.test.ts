@@ -26,4 +26,19 @@ describe("Android bundle configuration", () => {
       expect(text).not.toContain(permission);
     }
   });
+
+  it("commits the generated Android project but not local signing properties", () => {
+    expect(existsSync("src-tauri/gen/android/app/build.gradle.kts")).toBe(true);
+    expect(existsSync("src-tauri/gen/android/gradlew")).toBe(true);
+    expect(readFileSync("src-tauri/gen/android/app/src/main/res/values/strings.xml", "utf8"))
+      .toContain(">扫雷<");
+    const ignored = readFileSync(".gitignore", "utf8");
+    expect(ignored).toContain("src-tauri/gen/android/keystore.properties");
+    expect(ignored).toContain("src-tauri/gen/android/.gradle/");
+  });
+
+  it("exposes the Tauri CLI script required by the generated Gradle project", () => {
+    const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
+    expect(packageJson.scripts.tauri).toBe("tauri");
+  });
 });
