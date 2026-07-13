@@ -15,7 +15,6 @@ const CLICK_DURATION_MS = 580;
 const DRAG_SETTLE_MS = 420;
 const DRAG_MOVE_THRESHOLD_PX = 5;
 const DRAG_FRAME_DELAY_MS = 16;
-const MAX_DRAG_SAMPLE_INTERVAL_MS = 64;
 const MAX_DRAG_VELOCITY_PX_PER_MS = 3;
 const TARGET_PADDING_PX = 5;
 const MIN_TARGET_PX = 48;
@@ -414,9 +413,7 @@ export function installHomeLiquidSelection(
       height,
     };
     const rawElapsed = sample.timeStamp - session.lastRenderedTime;
-    const elapsed = Number.isFinite(rawElapsed)
-      && rawElapsed >= 1
-      && rawElapsed <= MAX_DRAG_SAMPLE_INTERVAL_MS
+    const elapsed = Number.isFinite(rawElapsed) && rawElapsed > 0
       ? rawElapsed
       : DRAG_FRAME_DELAY_MS;
     const velocityX = Math.min(

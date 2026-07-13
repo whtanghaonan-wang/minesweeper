@@ -991,6 +991,56 @@ describe("installHomeLiquidSelection", () => {
     controller.destroy();
   });
 
+  it("preserves physical velocity normalization across a 100ms frame", () => {
+    const fixture = createFixture();
+    const raf = installRafQueue();
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 95,
+      clientX: 155,
+      clientY: 100,
+      timeStamp: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 95,
+      clientX: 171,
+      clientY: 100,
+      timeStamp: 116,
+    });
+    raf.flush();
+    const normalFrameScale = readIndicatorScale(fixture.indicator);
+    dispatchPointer(window, "pointercancel", { pointerId: 95, timeStamp: 117 });
+
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 96,
+      clientX: 155,
+      clientY: 100,
+      timeStamp: 200,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 96,
+      clientX: 255,
+      clientY: 100,
+      timeStamp: 300,
+    });
+    raf.flush();
+    const longFrameScale = readIndicatorScale(fixture.indicator);
+
+    expect(normalFrameScale.every(Number.isFinite)).toBe(true);
+    expect(longFrameScale.every(Number.isFinite)).toBe(true);
+    expect(longFrameScale[0]).toBeCloseTo(normalFrameScale[0], 2);
+    expect(longFrameScale[1]).toBeCloseTo(normalFrameScale[1], 2);
+    dispatchPointer(window, "pointercancel", { pointerId: 96, timeStamp: 301 });
+    controller.destroy();
+  });
+
   it("keeps live velocity output finite for zero, negative, and extreme elapsed time", () => {
     const fixture = createFixture();
     const raf = installRafQueue();
