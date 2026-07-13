@@ -21,6 +21,7 @@ interface PointerLikeInit extends MouseEventInit {
   pointerId?: number;
   pointerType?: string;
   isPrimary?: boolean;
+  timeStamp?: number;
 }
 
 interface RafQueue {
@@ -87,9 +88,20 @@ function dispatchPointer(
     pointerId: { configurable: true, value: init.pointerId ?? 1 },
     pointerType: { configurable: true, value: init.pointerType ?? "mouse" },
     isPrimary: { configurable: true, value: init.isPrimary ?? true },
+    ...(init.timeStamp === undefined
+      ? {}
+      : { timeStamp: { configurable: true, value: init.timeStamp } }),
   });
   target.dispatchEvent(event);
   return event;
+}
+
+function readIndicatorScale(indicator: HTMLElement): [number, number] {
+  const match = indicator.style.transform.match(
+    /scale\((-?\d+(?:\.\d+)?), (-?\d+(?:\.\d+)?)\)/,
+  );
+  if (!match) throw new Error(`Missing scale transform: ${indicator.style.transform}`);
+  return [Number(match[1]), Number(match[2])];
 }
 
 function installRafQueue(ownerWindow: Window = window): RafQueue {
@@ -585,6 +597,42 @@ describe("installHomeLiquidSelection", () => {
     expect(clearOwnerTimeout).toHaveBeenCalledWith(42);
   });
 
+  it("cancels pending navigation as soon as a valid drag session starts", () => {
+    const fixture = createFixture();
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.sound,
+    );
+    fixture.select.click();
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 90,
+      clientX: 90,
+      clientY: 164,
+    });
+
+    vi.advanceTimersByTime(221);
+    expect(fixture.selectActivate).not.toHaveBeenCalled();
+
+    dispatchPointer(window, "pointermove", {
+      pointerId: 90,
+      clientX: 267,
+      clientY: 164,
+    });
+    dispatchPointer(window, "pointerup", {
+      pointerId: 90,
+      clientX: 267,
+      clientY: 164,
+    });
+    expect(fixture.sound.classList.contains("is-home-selected")).toBe(true);
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(1);
+    vi.runAllTimers();
+    expect(fixture.selectActivate).not.toHaveBeenCalled();
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(1);
+    controller.destroy();
+  });
+
   it("supports 20 consecutive drags from the newly selected lobe with fresh pointer ids", () => {
     const fixture = createFixture();
     const controller = installHomeLiquidSelection(
@@ -723,11 +771,13 @@ describe("installHomeLiquidSelection", () => {
       clientX: 155,
       clientY: 100,
     });
+    expect(fixture.panel.classList.contains("is-home-liquid-dragging")).toBe(true);
     expect(addWindowListener.mock.calls.some(([type]) => type === "pointermove")).toBe(true);
 
     finish(fixture);
     vi.runAllTimers();
 
+    expect(fixture.panel.classList.contains("is-home-liquid-dragging")).toBe(false);
     expect(fixture.play.classList.contains("is-home-selected")).toBe(true);
     expect(fixture.indicator.style.left).toBe("145px");
     expect(fixture.indicator.style.top).toBe("80px");
@@ -873,6 +923,7 @@ describe("installHomeLiquidSelection", () => {
       clientX: 155,
       clientY: 100,
     });
+    expect(fixture.panel.classList.contains("is-home-liquid-dragging")).toBe(true);
 
     dispatchPointer(window, "pointermove", { pointerId: 9, clientX: 110, clientY: 145 });
     dispatchPointer(window, "pointermove", { pointerId: 9, clientX: 90, clientY: 164 });
@@ -884,8 +935,132 @@ describe("installHomeLiquidSelection", () => {
 
     expect(raf.cancel).toHaveBeenCalledTimes(1);
     expect(raf.pending()).toBe(0);
+    expect(fixture.panel.classList.contains("is-home-liquid-dragging")).toBe(false);
     expect(fixture.sound.classList.contains("is-home-selected")).toBe(true);
     expect(fixture.soundActivate).toHaveBeenCalledTimes(1);
+    controller.destroy();
+  });
+
+  it("normalizes live stretch by elapsed sample time", () => {
+    const fixture = createFixture();
+    const raf = installRafQueue();
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 91,
+      clientX: 155,
+      clientY: 100,
+      timeStamp: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 91,
+      clientX: 179,
+      clientY: 100,
+      timeStamp: 116,
+    });
+    raf.flush();
+    const shortIntervalScale = readIndicatorScale(fixture.indicator);
+    dispatchPointer(window, "pointercancel", { pointerId: 91, timeStamp: 117 });
+
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 92,
+      clientX: 155,
+      clientY: 100,
+      timeStamp: 200,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 92,
+      clientX: 203,
+      clientY: 100,
+      timeStamp: 232,
+    });
+    raf.flush();
+    const longIntervalScale = readIndicatorScale(fixture.indicator);
+
+    expect(shortIntervalScale.every(Number.isFinite)).toBe(true);
+    expect(longIntervalScale.every(Number.isFinite)).toBe(true);
+    expect(longIntervalScale[0]).toBeCloseTo(shortIntervalScale[0], 2);
+    expect(longIntervalScale[1]).toBeCloseTo(shortIntervalScale[1], 2);
+    dispatchPointer(window, "pointercancel", { pointerId: 92, timeStamp: 233 });
+    controller.destroy();
+  });
+
+  it("keeps live velocity output finite for zero, negative, and extreme elapsed time", () => {
+    const fixture = createFixture();
+    const raf = installRafQueue();
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    vi.spyOn(window.performance, "now")
+      .mockReturnValueOnce(116)
+      .mockReturnValueOnce(132);
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 93,
+      clientX: 155,
+      clientY: 100,
+      timeStamp: 100,
+    });
+
+    for (const [clientX, timeStamp] of [[179, 100], [203, 90], [227, 1_000_000]]) {
+      dispatchPointer(window, "pointermove", {
+        pointerId: 93,
+        clientX,
+        clientY: 100,
+        timeStamp,
+      });
+      raf.flush();
+      const [scaleX, scaleY] = readIndicatorScale(fixture.indicator);
+      expect(Number.isFinite(scaleX) && Number.isFinite(scaleY)).toBe(true);
+      expect(scaleX).toBeGreaterThanOrEqual(0.8);
+      expect(scaleX).toBeLessThanOrEqual(1.28);
+      expect(scaleY).toBeGreaterThanOrEqual(0.8);
+      expect(scaleY).toBeLessThanOrEqual(1.2);
+    }
+
+    dispatchPointer(window, "pointercancel", { pointerId: 93, timeStamp: 1_000_001 });
+    controller.destroy();
+  });
+
+  it("keeps live drag transform neutral under reduced motion", () => {
+    const fixture = createFixture();
+    const raf = installRafQueue();
+    vi.stubGlobal("matchMedia", () => ({ matches: true }));
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+    dispatchPointer(fixture.indicator, "pointerdown", {
+      pointerId: 94,
+      clientX: 155,
+      clientY: 100,
+      timeStamp: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 94,
+      clientX: 90,
+      clientY: 164,
+      timeStamp: 116,
+    });
+    raf.flush();
+
+    expect(fixture.indicator.style.left).toBe("80px");
+    expect(fixture.indicator.style.width).toBe("130px");
+    expect(fixture.indicator.style.transform).toBe(
+      "translate(-50%, -50%) scale(1, 1)",
+    );
+    dispatchPointer(window, "pointercancel", { pointerId: 94, timeStamp: 117 });
     controller.destroy();
   });
 
@@ -1018,7 +1193,9 @@ describe("installHomeLiquidSelection", () => {
       clientX: 267,
       clientY: 164,
     });
+    expect(fixture.panel.classList.contains("is-home-liquid-dragging")).toBe(true);
     controller.destroy();
+    expect(fixture.panel.classList.contains("is-home-liquid-dragging")).toBe(false);
     const leftAfterDestroy = fixture.indicator.style.left;
     dispatchPointer(window, "pointermove", { pointerId: 13, clientX: 20, clientY: 20 });
     vi.runAllTimers();

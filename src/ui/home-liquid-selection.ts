@@ -15,6 +15,8 @@ const CLICK_DURATION_MS = 580;
 const DRAG_SETTLE_MS = 420;
 const DRAG_MOVE_THRESHOLD_PX = 5;
 const DRAG_FRAME_DELAY_MS = 16;
+const MAX_DRAG_SAMPLE_INTERVAL_MS = 64;
+const MAX_DRAG_VELOCITY_PX_PER_MS = 3;
 const TARGET_PADDING_PX = 5;
 const MIN_TARGET_PX = 48;
 const PANEL_SAFETY_PX = 6;
@@ -46,6 +48,7 @@ interface PanelBox {
 interface PointerSample {
   clientX: number;
   clientY: number;
+  timeStamp: number;
 }
 
 interface ActiveDrag {
@@ -54,6 +57,7 @@ interface ActiveDrag {
   startY: number;
   lastRenderedX: number;
   lastRenderedY: number;
+  lastRenderedTime: number;
   originGeometry: TargetGeometry;
   pendingSample: PointerSample | null;
   candidate: HomeLiquidTarget | null;
@@ -227,6 +231,16 @@ export function installHomeLiquidSelection(
     activeAnimation = null;
   };
 
+  const prefersReducedMotion = (): boolean => {
+    const matchMedia = ownerWindow.matchMedia;
+    if (typeof matchMedia !== "function") return true;
+    try {
+      return matchMedia.call(ownerWindow, "(prefers-reduced-motion: reduce)").matches;
+    } catch {
+      return true;
+    }
+  };
+
   const moveIndicator = (
     button: HTMLButtonElement,
     animate: boolean,
@@ -244,11 +258,7 @@ export function installHomeLiquidSelection(
     applyGeometry(indicator, nextGeometry);
 
     if (!animate || !previousGeometry || !layoutAvailable) return;
-    const matchMedia = ownerWindow.matchMedia;
-    if (typeof matchMedia !== "function" || matchMedia.call(
-      ownerWindow,
-      "(prefers-reduced-motion: reduce)",
-    ).matches) return;
+    if (prefersReducedMotion()) return;
     if (typeof indicator.animate !== "function") return;
 
     try {
@@ -403,13 +413,35 @@ export function installHomeLiquidSelection(
       width,
       height,
     };
-    const velocityX = Math.min(1, Math.abs(sample.clientX - session.lastRenderedX) / 48);
-    const velocityY = Math.min(1, Math.abs(sample.clientY - session.lastRenderedY) / 48);
-    const scaleX = Math.max(0.8, Math.min(1.28, 1 + velocityX * 0.28 - velocityY * 0.1));
-    const scaleY = Math.max(0.8, Math.min(1.2, 1 + velocityY * 0.2 - velocityX * 0.1));
+    const rawElapsed = sample.timeStamp - session.lastRenderedTime;
+    const elapsed = Number.isFinite(rawElapsed)
+      && rawElapsed >= 1
+      && rawElapsed <= MAX_DRAG_SAMPLE_INTERVAL_MS
+      ? rawElapsed
+      : DRAG_FRAME_DELAY_MS;
+    const velocityX = Math.min(
+      1,
+      Math.abs(sample.clientX - session.lastRenderedX)
+        / elapsed
+        / MAX_DRAG_VELOCITY_PX_PER_MS,
+    );
+    const velocityY = Math.min(
+      1,
+      Math.abs(sample.clientY - session.lastRenderedY)
+        / elapsed
+        / MAX_DRAG_VELOCITY_PX_PER_MS,
+    );
+    const reduceMotion = prefersReducedMotion();
+    const scaleX = reduceMotion
+      ? 1
+      : Math.max(0.8, Math.min(1.28, 1 + velocityX * 0.28 - velocityY * 0.1));
+    const scaleY = reduceMotion
+      ? 1
+      : Math.max(0.8, Math.min(1.2, 1 + velocityY * 0.2 - velocityX * 0.1));
 
     session.lastRenderedX = sample.clientX;
     session.lastRenderedY = sample.clientY;
+    session.lastRenderedTime = sample.timeStamp;
     currentGeometry = geometry;
     currentLayoutAvailable = box.width > 0 && box.height > 0;
     showCandidate(session, magnetic?.target ?? null);
@@ -470,13 +502,34 @@ export function installHomeLiquidSelection(
     renderPendingSample(session);
   };
 
+  const readPointerTime = (event: PointerEvent, previous?: number): number => {
+    if (
+      Number.isFinite(event.timeStamp)
+      && (previous === undefined || event.timeStamp > previous)
+    ) return event.timeStamp;
+    try {
+      const fallback = ownerWindow.performance.now();
+      if (Number.isFinite(fallback) && (previous === undefined || fallback > previous)) {
+        return fallback;
+      }
+    } catch {
+      // The deterministic frame interval below keeps velocity finite.
+    }
+    return (previous ?? 0) + DRAG_FRAME_DELAY_MS;
+  };
+
   const updatePointerSample = (session: ActiveDrag, event: PointerEvent): void => {
     if (!Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) return;
     session.moved ||= Math.hypot(
       event.clientX - session.startX,
       event.clientY - session.startY,
     ) > DRAG_MOVE_THRESHOLD_PX;
-    session.pendingSample = { clientX: event.clientX, clientY: event.clientY };
+    const previousTime = session.pendingSample?.timeStamp ?? session.lastRenderedTime;
+    session.pendingSample = {
+      clientX: event.clientX,
+      clientY: event.clientY,
+      timeStamp: readPointerTime(event, previousTime),
+    };
   };
 
   const releasePointerCapture = (pointerId: number): void => {
@@ -519,6 +572,7 @@ export function installHomeLiquidSelection(
     cancelScheduledFrame(session);
     session.pendingSample = null;
     clearCandidateClasses();
+    panel.classList.remove("is-home-liquid-dragging");
     removeActiveListeners();
     releasePointerCapture(session.pointerId);
   };
@@ -605,6 +659,7 @@ export function installHomeLiquidSelection(
     const originGeometry = measureTarget(panel, selectedTarget.button)?.geometry
       ?? currentGeometry;
     if (!originGeometry) return;
+    cancelPendingActivation();
     cancelAnimation();
     const pointerId = Number.isFinite(pointer.pointerId) ? pointer.pointerId : 0;
     const session: ActiveDrag = {
@@ -613,6 +668,7 @@ export function installHomeLiquidSelection(
       startY: pointer.clientY,
       lastRenderedX: pointer.clientX,
       lastRenderedY: pointer.clientY,
+      lastRenderedTime: readPointerTime(pointer),
       originGeometry,
       pendingSample: null,
       candidate: null,
@@ -621,6 +677,7 @@ export function installHomeLiquidSelection(
       moved: false,
     };
     activeDrag = session;
+    panel.classList.add("is-home-liquid-dragging");
     clearCandidateClasses();
     installActiveListeners();
     const box = measurePanelBox(panel);
@@ -683,6 +740,7 @@ export function installHomeLiquidSelection(
       panel.removeEventListener("pointerdown", onPointerDown, true);
       panel.removeEventListener("lostpointercapture", onLostPointerCapture);
       ownerWindow.removeEventListener("resize", onResize);
+      panel.classList.remove("is-home-liquid-dragging");
       for (const target of targets) {
         target.button.classList.remove("is-home-selected", "is-home-candidate");
       }
