@@ -53,6 +53,39 @@ function optionalDeclarations(source: string, selector: string): string {
   return source.match(new RegExp(`${escaped}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
 }
 
+function blockBodies(source: string, marker: string): string[] {
+  const blocks: string[] = [];
+  let cursor = 0;
+  while (cursor < source.length) {
+    const markerStart = source.indexOf(marker, cursor);
+    if (markerStart < 0) break;
+    const open = source.indexOf("{", markerStart + marker.length);
+    if (open < 0) throw new Error(`missing opening brace after ${marker}`);
+    let depth = 0;
+    let close = -1;
+    for (let index = open; index < source.length; index += 1) {
+      if (source[index] === "{") depth += 1;
+      if (source[index] === "}") depth -= 1;
+      if (depth === 0) {
+        close = index;
+        break;
+      }
+    }
+    if (close < 0) throw new Error(`missing closing brace after ${marker}`);
+    blocks.push(source.slice(open + 1, close));
+    cursor = close + 1;
+  }
+  return blocks;
+}
+
+function declarationsInBlock(source: string, marker: string, selector: string): string {
+  for (const block of blockBodies(source, marker)) {
+    const result = optionalDeclarations(block, selector);
+    if (result) return result;
+  }
+  throw new Error(`missing CSS selector ${selector} inside ${marker}`);
+}
+
 describe("Liquid Glass 静态约束", () => {
   const glass = readFileSync("src/ui/liquid-glass.css", "utf8");
   const style = readFileSync("src/ui/style.css", "utf8");
@@ -70,6 +103,20 @@ describe("Liquid Glass 静态约束", () => {
     expect(glass).toContain("data-reduced-transparency");
     expect(glass).toContain("prefers-contrast: more");
     expect(glass).toContain("forced-colors: active");
+  });
+  it("轻玻璃使用 14px 模糊和更低饱和、棱镜、阴影强度", () => {
+    const light = declarations(glass, "[data-liquid-glass].glass-light");
+    expect(light).toContain("--glass-blur: 14px");
+    expect(light).toContain("--glass-saturate: 135%");
+    expect(light).toContain("--glass-tint-strong: rgba(245, 249, 245, .44)");
+    expect(light).toContain("--glass-shadow: rgba(42, 57, 45, .11)");
+    expect(light).toContain("--glass-prism-a: rgba(115, 226, 196, .13)");
+    expect(light).toContain("--glass-prism-b: rgba(154, 164, 255, .11)");
+    expect(light).toContain("--glass-prism-c: rgba(255, 171, 210, .09)");
+    expect(declarations(glass, "[data-liquid-glass].glass-light::before"))
+      .toContain("opacity: .42");
+    expect(declarations(glass, "[data-liquid-glass].glass-light::after"))
+      .toContain("opacity: .46");
   });
   it("棋盘/格子规则不含 glass/filter/永久 will-change", () => {
     const boardRules = style.match(/\.board[^}]*}|\.cell[^}]*}/g)?.join("\n") ?? "";
@@ -112,9 +159,15 @@ describe("Liquid Glass 静态约束", () => {
     expect(gameTop).toContain("padding: max(0.625rem, env(safe-area-inset-top) + 0.25rem) 1.75rem");
     const topActions = declarations(style, ".top-actions");
     expect(topActions).toContain("grid-template-areas");
-    const narrow = style.match(/@media \(max-width: 420px\), \(max-height: 620px\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
+    const narrow = blockBodies(style, "@media (max-width: 420px), (max-height: 620px)")[0] ?? "";
     expect(narrow).toContain("grid-template-columns: auto minmax(0, 1fr)");
     expect(narrow).toContain("grid-template-columns: repeat(4, minmax(0, 1fr))");
+    expect(optionalDeclarations(narrow, ".game-top")).not.toContain("padding-inline");
+    const phone = declarationsInBlock(style, "@media (max-width: 420px)", ".game-top");
+    expect(phone).toContain("width: min(84vw, 22rem)");
+    expect(phone).toContain("padding-inline: 0");
+    const smallPhone = declarationsInBlock(style, "@media (max-width: 360px)", ".game-top");
+    expect(smallPhone).toContain("width: min(92vw, 21rem)");
     expect(declarations(style, ".game-sound")).toContain("font-size: 1.25rem");
     expect(declarations(style, ".restart")).toContain("font-size: 1.5rem");
   });

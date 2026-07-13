@@ -62,6 +62,23 @@ async function expectTouchTargets(page: Page): Promise<void> {
   }
 }
 
+async function openGame(page: Page, width: number): Promise<void> {
+  await page.setViewportSize({ width, height: 844 });
+  await page.goto("/");
+  await page.locator(".home-play").click();
+  await expect(page.locator(".top-actions")).toBeVisible();
+}
+
+async function expectGameSlotsTouchable(page: Page): Promise<Rect[]> {
+  const slots = await boxesFor(page, ".game-stats > *");
+  expect(slots).toHaveLength(4);
+  for (const slot of slots) {
+    expect(slot.width).toBeGreaterThanOrEqual(44);
+    expect(slot.height).toBeGreaterThanOrEqual(44);
+  }
+  return slots;
+}
+
 test("桌面首页是低矮横向胶囊且版本号在表面外", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/");
@@ -84,6 +101,37 @@ test("390px 首页完整可触控且不横向溢出", async ({ page }) => {
     expect(box!.height).toBeGreaterThanOrEqual(44);
   }
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+});
+
+test("390px 游戏顶栏收窄、四槽等宽且使用 14px 轻玻璃", async ({ page }) => {
+  await openGame(page, 390);
+  const topActions = page.locator(".top-actions");
+  const topBox = (await topActions.boundingBox())!;
+  expect(topBox.width).toBeGreaterThanOrEqual(302);
+  expect(topBox.width).toBeLessThanOrEqual(314);
+
+  const slots = await expectGameSlotsTouchable(page);
+  const slotWidths = slots.map(({ width }) => width);
+  expect(Math.max(...slotWidths) - Math.min(...slotWidths)).toBeLessThan(1);
+
+  const back = (await page.getByRole("button", { name: "返回选关" }).boundingBox())!;
+  expect(back.width).toBeGreaterThanOrEqual(44);
+  expect(back.height).toBeGreaterThanOrEqual(44);
+  const filters = await topActions.evaluate((element) => {
+    const computed = getComputedStyle(element);
+    return `${computed.backdropFilter} ${computed.getPropertyValue("-webkit-backdrop-filter")}`;
+  });
+  expect(filters.toLowerCase()).toContain("blur(14px)");
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
+});
+
+test("320px 游戏顶栏不溢出且四槽保持 44px 可触控", async ({ page }) => {
+  await openGame(page, 320);
+  const topBox = (await page.locator(".top-actions").boundingBox())!;
+  expect(topBox.x).toBeGreaterThanOrEqual(0);
+  expect(topBox.x + topBox.width).toBeLessThanOrEqual(320 + EPSILON);
+  await expectGameSlotsTouchable(page);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
 });
 
 test("721–1024px 首页分区均位于胶囊内且不横向溢出", async ({ page }) => {

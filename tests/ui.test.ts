@@ -217,6 +217,10 @@ describe("游戏页", () => {
     expect(surfaces).toHaveLength(2);
     expect([...surfaces].every((surface) => surface.classList.contains("glass-compact")))
       .toBe(true);
+    const topActions = root.querySelector(".top-actions")!;
+    const bottomActions = root.querySelector(".bottom-actions")!;
+    expect(topActions.classList.contains("glass-light")).toBe(true);
+    expect(bottomActions.classList.contains("glass-light")).toBe(false);
     for (const button of root.querySelectorAll(".game-top button, .bottom-actions button")) {
       expect(button.hasAttribute("data-jelly")).toBe(true);
       expect(button.hasAttribute("data-liquid-glass")).toBe(false);

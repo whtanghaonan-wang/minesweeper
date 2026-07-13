@@ -1041,10 +1041,6 @@ html[data-reduced-transparency] .home-play {
 }
 
 @media (max-width: 420px), (max-height: 620px) {
-  .game-top {
-    padding-inline: 1.75rem;
-  }
-
   .top-actions {
     grid-template-columns: auto minmax(0, 1fr);
     grid-template-areas:
@@ -1069,6 +1065,19 @@ html[data-reduced-transparency] .home-play {
     width: 100%;
     min-width: 0;
     justify-content: center;
+  }
+}
+
+@media (max-width: 420px) {
+  .game-top {
+    width: min(84vw, 22rem);
+    padding-inline: 0;
+  }
+}
+
+@media (max-width: 360px) {
+  .game-top {
+    width: min(92vw, 21rem);
   }
 }
 

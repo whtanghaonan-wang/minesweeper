@@ -101,7 +101,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   const top = document.createElement("header");
   top.className = "game-top";
   const topActions = document.createElement("div");
-  topActions.className = "top-actions glass-compact";
+  topActions.className = "top-actions glass-compact glass-light";
   topActions.dataset["liquidGlass"] = "";
   const backBtn = button("pill back", "←", exit);
   backBtn.setAttribute("aria-label", "返回选关");
