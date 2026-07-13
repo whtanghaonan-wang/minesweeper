@@ -171,6 +171,7 @@ test("结果 dialog 在真实浏览器锁焦点并在 Escape 后解除 inert", a
 });
 
 test("首页、菜单和游戏无 serious/critical axe 问题", async ({ page }) => {
+  test.slow();
   await page.goto("/");
   for (const open of [
     async () => {},

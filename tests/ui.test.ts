@@ -763,3 +763,12 @@ describe("有限动效 CSS", () => {
     expect(reduced).toMatch(/\.overlay\s*{\s*animation-duration:\s*100ms/);
   });
 });
+
+describe("重型 E2E 的 CI 预算", () => {
+  it("多场景 Axe 扫描明确声明慢速预算", () => {
+    const e2e = readFileSync("tests/e2e/v2.3-ui.e2e.ts", "utf8");
+    expect(e2e).toMatch(
+      /test\("首页、菜单和游戏无 serious\/critical axe 问题", async \(\{ page \}\) => \{\s*test\.slow\(\);/,
+    );
+  });
+});
