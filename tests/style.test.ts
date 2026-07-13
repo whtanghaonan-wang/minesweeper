@@ -102,7 +102,10 @@ describe("Liquid Glass 静态约束", () => {
     expect(panel).toContain("max-width: 54rem");
     expect(style).toContain(".home-secondary-actions");
     expect(style).toContain(".home-tools");
-    expect(style).toMatch(/@media \(max-width: 720px\)[\s\S]*"stats tools"[\s\S]*"play play"/);
+    expect(style).toMatch(/@media \(max-width: 1040px\)[\s\S]*"stats tools"[\s\S]*"play play"/);
+    expect(style).toMatch(
+      /@media \(max-width: 360px\)[\s\S]*"stats"[\s\S]*"tools"[\s\S]*"secondary"/,
+    );
   });
   it("移动端游戏顶栏收窄并让四个统计/操作槽位等宽对称", () => {
     const gameTop = declarations(style, ".game-top");

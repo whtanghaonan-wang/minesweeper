@@ -974,7 +974,7 @@ html[data-reduced-transparency] .home-play {
   color: var(--ink-soft);
 }
 
-@media (max-width: 720px) {
+@media (max-width: 1040px) {
   .home-panel {
     width: min(100%, 24rem);
     grid-template-columns: minmax(0, 1fr) auto;
@@ -993,6 +993,28 @@ html[data-reduced-transparency] .home-play {
 
   .home-secondary-actions {
     gap: 0.625rem;
+  }
+}
+
+@media (max-width: 360px) {
+  .home-panel {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "stats"
+      "tools"
+      "bar"
+      "play"
+      "secondary";
+  }
+
+  .home-stats,
+  .home-tools {
+    justify-content: center;
+  }
+
+  .home-tools {
+    min-width: 0;
+    flex-wrap: wrap;
   }
 }
 
