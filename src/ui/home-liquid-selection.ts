@@ -573,7 +573,7 @@ export function installHomeLiquidSelection(
     });
     ownerWindow.addEventListener("pointerup", onActivePointerUp, true);
     ownerWindow.addEventListener("pointercancel", onActivePointerCancel, true);
-    ownerWindow.addEventListener("blur", onActiveWindowBlur, true);
+    ownerWindow.addEventListener("blur", onActiveWindowBlur);
     ownerDocument.addEventListener("visibilitychange", onVisibilityChange, true);
   }
 
@@ -583,7 +583,7 @@ export function installHomeLiquidSelection(
     ownerWindow.removeEventListener("pointermove", onActivePointerMove, true);
     ownerWindow.removeEventListener("pointerup", onActivePointerUp, true);
     ownerWindow.removeEventListener("pointercancel", onActivePointerCancel, true);
-    ownerWindow.removeEventListener("blur", onActiveWindowBlur, true);
+    ownerWindow.removeEventListener("blur", onActiveWindowBlur);
     ownerDocument.removeEventListener("visibilitychange", onVisibilityChange, true);
   }
 

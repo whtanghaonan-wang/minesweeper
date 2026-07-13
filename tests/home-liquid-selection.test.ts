@@ -1006,6 +1006,49 @@ describe("installHomeLiquidSelection", () => {
     controller.destroy();
   });
 
+  it("keeps a mouse drag active when the selected button focus blurs the title", () => {
+    const fixture = createFixture();
+    const title = document.createElement("h1");
+    title.tabIndex = -1;
+    fixture.panel.before(title);
+    title.focus();
+    expect(document.activeElement).toBe(title);
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+
+    dispatchPointer(fixture.play, "pointerdown", {
+      pointerId: 48,
+      pointerType: "mouse",
+      clientX: 155,
+      clientY: 100,
+    });
+    fixture.play.focus();
+
+    expect(document.activeElement).toBe(fixture.play);
+    expect(fixture.panel.classList.contains("is-home-liquid-dragging")).toBe(true);
+    dispatchPointer(window, "pointermove", {
+      pointerId: 48,
+      pointerType: "mouse",
+      clientX: 267,
+      clientY: 164,
+    });
+    dispatchPointer(window, "pointerup", {
+      pointerId: 48,
+      pointerType: "mouse",
+      clientX: 267,
+      clientY: 164,
+    });
+
+    expect(fixture.sound.classList.contains("is-home-selected")).toBe(true);
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(1);
+    expect(fixture.playActivate).not.toHaveBeenCalled();
+    controller.destroy();
+  });
+
   it.each([
     ["empty release", (_fixture: Fixture) => {
       dispatchPointer(window, "pointermove", { pointerId: 7, clientX: 320, clientY: 30 });
@@ -1500,6 +1543,7 @@ describe("installHomeLiquidSelection", () => {
     for (const type of ["pointermove", "pointerup", "pointercancel", "blur"]) {
       expect(addWindowListener.mock.calls.some(([actual]) => actual === type)).toBe(true);
     }
+    expect(addWindowListener.mock.calls.find(([actual]) => actual === "blur")?.[2]).not.toBe(true);
     expect(addDocumentListener.mock.calls.some(([actual]) => actual === "visibilitychange")).toBe(true);
     dispatchPointer(window, "pointermove", { pointerId: 12, clientX: 267, clientY: 164 });
     dispatchPointer(window, "pointerup", { pointerId: 12, clientX: 267, clientY: 164 });
@@ -1507,6 +1551,7 @@ describe("installHomeLiquidSelection", () => {
     for (const type of ["pointermove", "pointerup", "pointercancel", "blur"]) {
       expect(removeWindowListener.mock.calls.some(([actual]) => actual === type)).toBe(true);
     }
+    expect(removeWindowListener.mock.calls.find(([actual]) => actual === "blur")?.[2]).not.toBe(true);
     expect(removeDocumentListener.mock.calls.some(
       ([actual]) => actual === "visibilitychange",
     )).toBe(true);
