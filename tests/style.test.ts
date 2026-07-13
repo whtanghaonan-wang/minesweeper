@@ -148,13 +148,41 @@ describe("Liquid Glass 静态约束", () => {
     const active = optionalDeclarations(style, ".btn:active");
     expect(active).not.toMatch(/\b(?:transform|filter)\s*:/);
   });
-  it("首页面板不重复定义 Liquid Glass 材质,主按钮自带实色不透视", () => {
+  it("首页只有外层玻璃和一团同材质液化选中体", () => {
     const homePanel = declarations(style, ".home-panel");
     expect(homePanel).not.toMatch(/\b(?:background|backdrop-filter|filter|box-shadow)\s*:/);
     expect(homePanel).toContain("--glass-radius: 999px");
-    const homePlay = declarations(style, ".home-play");
-    expect(homePlay).not.toMatch(/backdrop-filter/);
-    expect(homePlay).toMatch(/\bbackground\s*:/);
+    expect(homePanel).toContain("--glass-prism-c: rgba(118, 196, 183, 0.18)");
+    expect(homePanel).not.toContain("255, 171, 210");
+
+    const lobe = declarations(style, ".home-liquid-selection");
+    expect(lobe).toContain("position: absolute");
+    expect(lobe).toContain("border-radius: 999px");
+    expect(lobe).toContain("backdrop-filter: blur(28px) saturate(180%)");
+    expect(lobe).toContain("pointer-events: auto");
+    expect(lobe).not.toContain("255, 171, 210");
+
+    for (const selector of [
+      ".home-play",
+      ".home-select,\n.home-endless",
+      ".sound-btn,\n.transparency-btn",
+    ]) {
+      const block = declarations(style, selector);
+      expect(block).not.toMatch(/\bbackground\s*:/);
+      expect(block).not.toMatch(/\bborder(?:-(?!radius\b)[\w-]+)?\s*:/);
+      expect(block).not.toMatch(/\bbox-shadow\s*:/);
+      expect(block).not.toMatch(/\b(?:-webkit-)?backdrop-filter\s*:/);
+      expect(block).not.toContain("color: #fff");
+    }
+
+    const target = declarations(style, ".home-liquid-target");
+    expect(target).toContain("background: transparent");
+    expect(target).toContain("border: 0");
+    expect(target).toContain("box-shadow: none");
+    expect(style).toContain(".home-liquid-target.is-home-selected");
+    expect(style).toContain("#005fc7");
+    expect(style).toContain("html[data-reduced-transparency] .home-liquid-selection");
+    expect(style).toContain("@media (forced-colors: active)");
   });
   it("v2.4 首页在桌面和中间宽度保持横向胶囊，窄屏再改为双层触控条", () => {
     const home = declarations(style, ".home");
@@ -196,18 +224,10 @@ describe("Liquid Glass 静态约束", () => {
     expect(declarations(style, ".game-sound")).toContain("font-size: 1.25rem");
     expect(declarations(style, ".restart")).toContain("font-size: 1.5rem");
   });
-  it("玻璃面上的扁平控件用 3:1 边界环,实色降级下仍可辨", () => {
-    expect(style).toMatch(
-      /\.sound-btn,\s*\.transparency-btn\s*\{[^}]*1px solid var\(--glass-boundary\)/,
-    );
-    expect(style).toMatch(
-      /\.home-select,\s*\.home-endless\s*\{[^}]*1px solid var\(--glass-boundary\)/,
-    );
+  it("非首页的玻璃扁平控件仍保留 3:1 边界环", () => {
     expect(style).toMatch(
       /\.tab-btn\.active,\s*\.tab-btn\[aria-pressed="true"\]\s*\{[^}]*0 0 0 1px var\(--glass-boundary\)/,
     );
-    expect(declarations(style, "html[data-reduced-transparency] .home-play"))
-      .toContain("#315c3e");
   });
   it("透明表面边界合成到白色/纸色后仍达到 3:1", () => {
     const boundary = rgbaVar(glass, "--glass-boundary");

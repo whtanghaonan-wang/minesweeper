@@ -843,6 +843,8 @@ button:disabled {
 
 .home-panel {
   --glass-radius: 999px;
+  --glass-prism-c: rgba(118, 196, 183, 0.18);
+  --home-selected-blue: #005fc7;
   width: min(100%, 54rem);
   max-width: 54rem;
   display: grid;
@@ -854,6 +856,87 @@ button:disabled {
   align-items: center;
   gap: 0.35rem 0.75rem;
   padding: 0.75rem 1rem;
+  overflow: hidden;
+}
+
+.home-liquid-selection {
+  position: absolute;
+  z-index: 1;
+  left: 50%;
+  top: 50%;
+  width: 48px;
+  height: 48px;
+  opacity: 0;
+  pointer-events: auto;
+  cursor: grab;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 24% 22%, rgba(255, 255, 255, 0.72), transparent 31%),
+    radial-gradient(circle at 18% 78%, rgba(115, 226, 196, 0.16), transparent 44%),
+    radial-gradient(circle at 82% 24%, rgba(83, 205, 221, 0.14), transparent 43%),
+    radial-gradient(circle at 72% 82%, rgba(154, 164, 255, 0.13), transparent 46%),
+    linear-gradient(135deg, rgba(238, 245, 240, 0.84), rgba(211, 223, 214, 0.68));
+  box-shadow:
+    inset 0 1px rgba(255, 255, 255, 0.84),
+    inset 0 -1px rgba(55, 78, 61, 0.08),
+    0 5px 14px rgba(47, 67, 52, 0.09);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  transform: translate(-50%, -50%);
+  transform-origin: center;
+}
+
+.home-liquid-selection::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(
+    ellipse at 50% 4%,
+    rgba(255, 255, 255, 0.52),
+    transparent 52%
+  );
+  pointer-events: none;
+}
+
+.home-panel > :not(.home-liquid-selection) {
+  position: relative;
+  z-index: 2;
+}
+
+.home-liquid-target {
+  position: relative;
+  z-index: 3;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  transition: color 100ms ease;
+}
+
+.home-liquid-target.is-home-selected,
+.home-liquid-target.is-home-candidate {
+  color: var(--home-selected-blue);
+}
+
+.home-liquid-target.is-home-selected,
+.home-liquid-selection,
+.is-home-liquid-dragging {
+  touch-action: none;
+}
+
+.is-home-liquid-dragging .home-liquid-selection {
+  cursor: grabbing;
+}
+
+.home-secondary-actions,
+.home-tools {
+  pointer-events: none;
+}
+
+.home-secondary-actions > button,
+.home-tools > button {
+  pointer-events: auto;
 }
 
 .home-stats {
@@ -882,9 +965,6 @@ button:disabled {
   min-height: 44px;
   padding: 0.25rem 0.5rem;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.66);
-  border: 1px solid var(--glass-boundary);
-  color: var(--ink);
 }
 
 .transparency-btn {
@@ -912,40 +992,17 @@ button:disabled {
   width: 100%;
   min-width: 0;
   padding: 0.8125rem 0;
-  color: #fff;
   border-radius: 999px;
   font-size: 1.0625rem;
   font-weight: 700;
-  background: linear-gradient(135deg, var(--glass-tinted-start), var(--glass-tinted-end));
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
-}
-
-/* 实色/高对比降级:与 glass-tinted 同策略实色化(#315c3e 白字 7.69:1) */
-html[data-reduced-transparency] .home-play {
-  background: #315c3e;
-}
-
-@media (prefers-reduced-transparency: reduce) {
-  .home-play {
-    background: #315c3e;
-  }
-}
-
-@media (prefers-contrast: more) {
-  .home-play {
-    background: #315c3e;
-  }
 }
 
 .home-select,
 .home-endless {
   min-width: 0;
   padding: 0.8125rem 0;
-  color: var(--ink);
   border-radius: 999px;
   font-size: 0.9375rem;
-  background: rgba(255, 255, 255, 0.66);
-  border: 1px solid var(--glass-boundary);
 }
 
 .home-secondary-actions {
@@ -957,8 +1014,28 @@ html[data-reduced-transparency] .home-play {
 }
 
 .home-endless.locked {
-  border-color: var(--ink-soft);
+  color: var(--ink-soft);
   cursor: default;
+}
+
+html[data-reduced-transparency] .home-liquid-selection {
+  background: #d7e2d9;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .home-liquid-selection {
+    background: #d7e2d9;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .home-liquid-target {
+    transition-duration: 0ms;
+  }
 }
 
 .he-sub {
@@ -1107,6 +1184,19 @@ html[data-reduced-transparency] .home-play {
 }
 
 @media (forced-colors: active) {
+  .home-liquid-selection {
+    background: Highlight;
+    border: 1px solid Highlight;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .home-liquid-target.is-home-selected,
+  .home-liquid-target.is-home-candidate {
+    color: HighlightText;
+  }
+
   button,
   .cell,
   .modal,

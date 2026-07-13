@@ -114,6 +114,13 @@ function hex(value: [number, number, number]): string {
 }
 
 describe("v2.3 可访问颜色", () => {
+  it("首页选中蓝在透明和实色玻璃背景均达到 4.5:1", () => {
+    const selected = cssVar("--home-selected-blue");
+    for (const background of ["#ffffff", "#f2efe9", "#d7e2d9"]) {
+      expect(contrast(selected, background), background).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it("正文/状态令牌在纸色和白色上均达到 4.5:1", () => {
     for (const foreground of [cssVar("--ink"), cssVar("--ink-soft")]) {
       for (const background of ["#ffffff", "#f2efe9"]) {
