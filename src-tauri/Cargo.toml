@@ -1,6 +1,6 @@
 [package]
 name = "minesweeper"
-version = "2.3.0"
+version = "2.4.0"
 description = "A no-guess Minesweeper game with 50 levels and endless mode"
 authors = ["whtanghaonan-wang"]
 repository = "https://github.com/whtanghaonan-wang/minesweeper"

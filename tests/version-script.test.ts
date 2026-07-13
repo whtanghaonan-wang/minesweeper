@@ -12,14 +12,14 @@ function writeJson(path: string, value: unknown): void {
 }
 
 function resetFixture(): void {
-  writeJson("package.json", { name: "minesweeper", version: "2.3.0" });
+  writeJson("package.json", { name: "minesweeper", version: "2.4.0" });
   writeJson("package-lock.json", {
-    name: "minesweeper", version: "2.3.0",
-    lockfileVersion: 3, packages: { "": { name: "minesweeper", version: "2.3.0" } },
+    name: "minesweeper", version: "2.4.0",
+    lockfileVersion: 3, packages: { "": { name: "minesweeper", version: "2.4.0" } },
   });
-  writeJson("src-tauri/tauri.conf.json", { version: "2.3.0" });
+  writeJson("src-tauri/tauri.conf.json", { version: "2.4.0" });
   writeFileSync(resolve(root, "src-tauri/Cargo.toml"),
-    '[package]\nname = "minesweeper"\nversion = "2.3.0"\nedition = "2021"\n');
+    '[package]\nname = "minesweeper"\nversion = "2.4.0"\nedition = "2021"\n');
 }
 
 function run(extra: string[] = [], env: Record<string, string> = {}) {
@@ -61,8 +61,8 @@ describe("version.mjs", () => {
   });
 
   it("tag 模式要求 v + package version", () => {
-    expect(run(["--tag"], { GITHUB_REF_NAME: "v2.3.1" }).status).toBe(1);
-    expect(run(["--tag"], { GITHUB_REF_NAME: "v2.3.0" }).status).toBe(0);
+    expect(run(["--tag"], { GITHUB_REF_NAME: "v2.4.1" }).status).toBe(1);
+    expect(run(["--tag"], { GITHUB_REF_NAME: "v2.4.0" }).status).toBe(0);
   });
 
   it("sync 修复 tauri、Cargo 和 lock 两个根版本", () => {
