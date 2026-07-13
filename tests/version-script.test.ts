@@ -18,6 +18,9 @@ function resetFixture(): void {
     lockfileVersion: 3, packages: { "": { name: "minesweeper", version: "2.4.0" } },
   });
   writeJson("src-tauri/tauri.conf.json", { version: "2.4.0" });
+  writeJson("src-tauri/tauri.android.conf.json", {
+    bundle: { android: { minSdkVersion: 24, versionCode: 2_004_000, autoIncrementVersionCode: false } },
+  });
   writeFileSync(resolve(root, "src-tauri/Cargo.toml"),
     '[package]\nname = "minesweeper"\nversion = "2.4.0"\nedition = "2021"\n');
 }
@@ -76,6 +79,16 @@ describe("version.mjs", () => {
     const sync = spawnSync(process.execPath, [script, "sync", "--root", root], {
       encoding: "utf8",
     });
+    expect(sync.status).toBe(0);
+    expect(run().status).toBe(0);
+  });
+
+  it("点名 Android versionCode 漂移并在 sync 时修复", () => {
+    writeJson("src-tauri/tauri.android.conf.json", {
+      bundle: { android: { minSdkVersion: 24, versionCode: 1, autoIncrementVersionCode: false } },
+    });
+    expect(run().stderr).toContain("tauri.android.conf.json versionCode");
+    const sync = spawnSync(process.execPath, [script, "sync", "--root", root], { encoding: "utf8" });
     expect(sync.status).toBe(0);
     expect(run().status).toBe(0);
   });

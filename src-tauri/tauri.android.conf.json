@@ -1,0 +1,9 @@
+{
+  "bundle": {
+    "android": {
+      "minSdkVersion": 24,
+      "versionCode": 2004000,
+      "autoIncrementVersionCode": false
+    }
+  }
+}
