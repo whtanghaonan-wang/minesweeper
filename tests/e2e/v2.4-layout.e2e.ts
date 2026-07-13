@@ -4,6 +4,7 @@ type Rect = { x: number; y: number; width: number; height: number };
 
 const EPSILON = 1;
 const HOME_CONTENT = [
+  ".home-liquid-selection",
   ".home-stats",
   ".home-stats > span",
   ".home-tools",
@@ -12,6 +13,14 @@ const HOME_CONTENT = [
   ".home-play",
   ".home-secondary-actions",
   ".home-secondary-actions > button",
+] as const;
+
+const HOME_TARGETS = [
+  ".home-play",
+  ".home-select",
+  ".home-endless",
+  ".sound-btn",
+  ".transparency-btn",
 ] as const;
 
 function expectInside(inner: Rect, outer: Rect): void {
@@ -60,6 +69,43 @@ async function expectTouchTargets(page: Page): Promise<void> {
     expect(box!.width).toBeGreaterThanOrEqual(44);
     expect(box!.height).toBeGreaterThanOrEqual(44);
   }
+}
+
+async function dragHomeLiquid(
+  page: Page,
+  targetSelector: string,
+  edge: "left" | "right",
+): Promise<void> {
+  const liquid = page.locator(".home-liquid-selection");
+  let start = { x: 0, y: 0 };
+  await expect.poll(async () => {
+    const settled = await liquid.evaluate((element) => (
+      element.getAnimations().every((animation) => animation.playState === "finished")
+    ));
+    if (!settled) return false;
+    const box = await liquid.boundingBox();
+    if (!box) return false;
+    start = {
+      x: edge === "left" ? box.x + 2 : box.x + box.width - 2,
+      y: box.y + box.height / 2,
+    };
+    return page.evaluate(({ x, y }) => (
+      document.elementFromPoint(x, y)?.classList.contains("home-liquid-selection") ?? false
+    ), start);
+  }, { message: `${edge} lobe edge should become exposed` }).toBe(true);
+
+  const target = await page.locator(targetSelector).boundingBox();
+  expect(target).not.toBeNull();
+
+  await page.mouse.move(start.x, start.y);
+  await page.mouse.down();
+  await page.mouse.move(
+    target!.x + target!.width / 2,
+    target!.y + target!.height / 2,
+    { steps: 14 },
+  );
+  await page.mouse.up();
+  await expect(page.locator(targetSelector)).toHaveClass(/is-home-selected/);
 }
 
 async function expectLowWideHomePanel(page: Page, width: number): Promise<Rect> {
@@ -128,6 +174,123 @@ test("桌面首页是低矮横向胶囊且版本号在表面外", async ({ page 
   expect(box!.width / box!.height).toBeGreaterThan(4);
   expect(await panel.evaluate((el) => getComputedStyle(el).borderRadius)).toBe("999px");
   await expect(page.locator(".home > .home-ver")).toBeVisible();
+});
+
+test("首页只有一团选中玻璃且所有空闲按钮透明", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+
+  const panel = page.locator(".home-panel");
+  const liquid = page.locator(".home-liquid-selection");
+  await expect(page.locator("[data-liquid-glass]")).toHaveCount(1);
+  await expect(liquid).toHaveCount(1);
+  await expect(page.locator(".home-play")).toHaveClass(/is-home-selected/);
+
+  for (const selector of HOME_TARGETS) {
+    const style = await page.locator(selector).evaluate((element) => {
+      const computed = getComputedStyle(element);
+      return {
+        backgroundColor: computed.backgroundColor,
+        borderTopWidth: computed.borderTopWidth,
+      };
+    });
+    expect(style.backgroundColor, selector).toBe("rgba(0, 0, 0, 0)");
+    expect(style.borderTopWidth, selector).toBe("0px");
+  }
+
+  const panelBox = await panel.boundingBox();
+  const liquidBox = await liquid.boundingBox();
+  expect(panelBox).not.toBeNull();
+  expect(liquidBox).not.toBeNull();
+  expectInside(liquidBox!, panelBox!);
+  const opacity = await liquid.evaluate((element) => Number(getComputedStyle(element).opacity));
+  expect(opacity).toBeGreaterThan(0);
+});
+
+test("默认开始按钮可单击且已选中的即时按钮可重复执行", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  await page.locator(".home-play").click();
+  await expect(page.locator(".top-actions")).toBeVisible();
+
+  await page.goto("/");
+  const sound = page.locator(".sound-btn");
+  const originalLabel = await sound.getAttribute("aria-label");
+  await sound.click();
+  await expect(sound).toHaveClass(/is-home-selected/);
+  await expect(sound).not.toHaveAttribute("aria-label", originalLabel!);
+  await sound.click();
+  await expect(sound).toHaveAttribute("aria-label", originalLabel!);
+  await expect(sound).toHaveClass(/is-home-selected/);
+});
+
+test("小胶囊边缘可连续拖拽 20 次且不会残留拖拽状态", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const sound = page.locator(".sound-btn");
+  const transparency = page.locator(".transparency-btn");
+
+  for (let index = 0; index < 20; index += 1) {
+    const isSound = index % 2 === 0;
+    const target = isSound ? sound : transparency;
+    const stateAttribute = isSound ? "aria-label" : "aria-pressed";
+    const before = await target.getAttribute(stateAttribute);
+    await dragHomeLiquid(
+      page,
+      isSound ? ".sound-btn" : ".transparency-btn",
+      isSound ? "left" : "right",
+    );
+    await expect(target).not.toHaveAttribute(stateAttribute, before!);
+    await expect(page.locator(".home-panel")).not.toHaveClass(/is-home-liquid-dragging/);
+    await expect(page.locator(".is-home-candidate")).toHaveCount(0);
+  }
+});
+
+test("lostpointercapture 后的新 pointerId 仍能拖拽", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const play = await page.locator(".home-play").boundingBox();
+  const sound = await page.locator(".sound-btn").boundingBox();
+  expect(play).not.toBeNull();
+  expect(sound).not.toBeNull();
+
+  await page.locator(".home-play").dispatchEvent("pointerdown", {
+    pointerId: 71,
+    pointerType: "touch",
+    isPrimary: true,
+    clientX: play!.x + play!.width / 2,
+    clientY: play!.y + play!.height / 2,
+  });
+  await page.locator(".home-panel").dispatchEvent("lostpointercapture", {
+    pointerId: 71,
+    pointerType: "touch",
+    isPrimary: true,
+  });
+  await page.locator(".home-play").dispatchEvent("pointerdown", {
+    pointerId: 72,
+    pointerType: "touch",
+    isPrimary: true,
+    clientX: play!.x + play!.width / 2,
+    clientY: play!.y + play!.height / 2,
+  });
+  await page.locator("body").dispatchEvent("pointermove", {
+    pointerId: 72,
+    pointerType: "touch",
+    isPrimary: true,
+    clientX: sound!.x + sound!.width / 2,
+    clientY: sound!.y + sound!.height / 2,
+  });
+  await page.locator("body").dispatchEvent("pointerup", {
+    pointerId: 72,
+    pointerType: "touch",
+    isPrimary: true,
+    clientX: sound!.x + sound!.width / 2,
+    clientY: sound!.y + sound!.height / 2,
+  });
+
+  await expect(page.locator(".sound-btn")).toHaveClass(/is-home-selected/);
+  await expect(page.locator(".home-panel")).not.toHaveClass(/is-home-liquid-dragging/);
+  await expect(page.locator(".is-home-candidate")).toHaveCount(0);
 });
 
 test("390px 首页完整可触控且不横向溢出", async ({ page }) => {
