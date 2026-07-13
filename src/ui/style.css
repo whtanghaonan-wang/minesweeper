@@ -996,7 +996,7 @@ html[data-reduced-transparency] .home-play {
   }
 }
 
-@media (max-width: 360px) {
+@media (max-width: 420px) {
   .home-panel {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:

@@ -1,14 +1,17 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 
 type Rect = { x: number; y: number; width: number; height: number };
 
 const EPSILON = 1;
-const HOME_REGIONS = [
+const HOME_CONTENT = [
   ".home-stats",
+  ".home-stats > span",
   ".home-tools",
+  ".home-tools > button",
   ".home-bar",
   ".home-play",
   ".home-secondary-actions",
+  ".home-secondary-actions > button",
 ] as const;
 
 function expectInside(inner: Rect, outer: Rect): void {
@@ -25,11 +28,37 @@ function rectanglesOverlap(a: Rect, b: Rect): boolean {
     && b.y + b.height > a.y + EPSILON;
 }
 
-async function expectHomeRegionsInsidePanel(page: import("@playwright/test").Page): Promise<void> {
+async function boxesFor(page: Page, selector: string): Promise<Rect[]> {
+  const locator = page.locator(selector);
+  const boxes: Rect[] = [];
+  for (let index = 0; index < await locator.count(); index += 1) {
+    boxes.push((await locator.nth(index).boundingBox())!);
+  }
+  return boxes;
+}
+
+async function expectHomeContentInsidePanel(page: Page): Promise<void> {
   const panel = (await page.locator(".home-panel").boundingBox())!;
-  for (const selector of HOME_REGIONS) {
-    const region = (await page.locator(selector).boundingBox())!;
-    expectInside(region, panel);
+  for (const selector of HOME_CONTENT) {
+    for (const box of await boxesFor(page, selector)) expectInside(box, panel);
+  }
+}
+
+async function expectStatsAndToolsSeparate(page: Page): Promise<void> {
+  const stats = await boxesFor(page, ".home-stats > span");
+  const tools = await boxesFor(page, ".home-tools > button");
+  for (const stat of stats) {
+    for (const tool of tools) expect(rectanglesOverlap(stat, tool)).toBe(false);
+  }
+}
+
+async function expectTouchTargets(page: Page): Promise<void> {
+  const buttons = page.locator(".home-panel button");
+  await expect(buttons).toHaveCount(5);
+  for (let index = 0; index < await buttons.count(); index += 1) {
+    const box = await buttons.nth(index).boundingBox();
+    expect(box!.width).toBeGreaterThanOrEqual(44);
+    expect(box!.height).toBeGreaterThanOrEqual(44);
   }
 }
 
@@ -63,25 +92,20 @@ test("721–1024px 首页分区均位于胶囊内且不横向溢出", async ({ p
     await page.goto("/");
     expect(await page.evaluate(() => document.documentElement.scrollWidth), `${width}px scrollWidth`)
       .toBe(width);
-    await expectHomeRegionsInsidePanel(page);
+    await expectHomeContentInsidePanel(page);
   }
 });
 
-test("320px 且 200% 根字号时核心功能仍可触控且不溢出", async ({ page }) => {
-  await page.setViewportSize({ width: 320, height: 844 });
-  await page.goto("/");
-  await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
-  const buttons = page.locator(".home-panel button");
-  await expect(buttons).toHaveCount(5);
-  for (let index = 0; index < await buttons.count(); index += 1) {
-    const box = await buttons.nth(index).boundingBox();
-    expect(box!.width).toBeGreaterThanOrEqual(44);
-    expect(box!.height).toBeGreaterThanOrEqual(44);
-  }
-  const stats = (await page.locator(".home-stats").boundingBox())!;
-  const tools = (await page.locator(".home-tools").boundingBox())!;
-  expect(stats.width).toBeGreaterThan(0);
-  expect(rectanglesOverlap(stats, tools)).toBe(false);
-  await expectHomeRegionsInsidePanel(page);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
-});
+for (const width of [320, 360, 361, 370, 390, 420]) {
+  test(`${width}px 且 200% 根字号时内容不重叠、不溢出且可触控`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto("/");
+    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
+    const stats = (await page.locator(".home-stats").boundingBox())!;
+    expect(stats.width).toBeGreaterThan(0);
+    await expectHomeContentInsidePanel(page);
+    await expectStatsAndToolsSeparate(page);
+    await expectTouchTargets(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+  });
+}
