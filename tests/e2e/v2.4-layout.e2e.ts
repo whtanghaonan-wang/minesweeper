@@ -62,11 +62,36 @@ async function expectTouchTargets(page: Page): Promise<void> {
   }
 }
 
-async function openGame(page: Page, width: number): Promise<void> {
-  await page.setViewportSize({ width, height: 844 });
+async function openGame(page: Page, width: number, height = 844): Promise<void> {
+  await page.setViewportSize({ width, height });
   await page.goto("/");
   await page.locator(".home-play").click();
   await expect(page.locator(".top-actions")).toBeVisible();
+}
+
+async function expectGameTopGeometry(page: Page, width: number, height = 844): Promise<{
+  top: Rect;
+  title: Rect;
+  stats: Rect;
+}> {
+  await openGame(page, width, height);
+  const top = (await page.locator(".top-actions").boundingBox())!;
+  const title = (await page.locator(".game-title").boundingBox())!;
+  const stats = (await page.locator(".game-stats").boundingBox())!;
+  expect(
+    rectanglesOverlap(title, stats),
+    `${width}x${height} title=${JSON.stringify(title)} stats=${JSON.stringify(stats)}`,
+  ).toBe(false);
+  for (const content of await boxesFor(page, ".game-title > *")) {
+    expect(
+      rectanglesOverlap(content, stats),
+      `${width}x${height} title content=${JSON.stringify(content)} stats=${JSON.stringify(stats)}`,
+    ).toBe(false);
+  }
+  expectInside(top, { x: 0, y: 0, width, height });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth), `${width}px scrollWidth`)
+    .toBe(width);
+  return { top, title, stats };
 }
 
 async function expectGameSlotsTouchable(page: Page): Promise<Rect[]> {
@@ -132,6 +157,21 @@ test("320px 游戏顶栏不溢出且四槽保持 44px 可触控", async ({ page 
   expect(topBox.x + topBox.width).toBeLessThanOrEqual(320 + EPSILON);
   await expectGameSlotsTouchable(page);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
+});
+
+test("420/421 与 600/601px 游戏顶栏平滑过渡且内容不重叠", async ({ page }) => {
+  const geometries = new Map<number, Awaited<ReturnType<typeof expectGameTopGeometry>>>();
+  for (const width of [420, 421, 600, 601]) {
+    geometries.set(width, await expectGameTopGeometry(page, width));
+  }
+  expect(Math.abs(geometries.get(420)!.top.width - geometries.get(421)!.top.width))
+    .toBeLessThan(3);
+  expect(Math.abs(geometries.get(600)!.top.width - geometries.get(601)!.top.width))
+    .toBeLessThan(48);
+});
+
+test("1024x600 短桌面保持双行顶栏且标题和统计栏不重叠", async ({ page }) => {
+  await expectGameTopGeometry(page, 1024, 600);
 });
 
 test("721–1024px 首页分区均位于胶囊内且不横向溢出", async ({ page }) => {

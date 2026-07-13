@@ -59,8 +59,14 @@ function blockBodies(source: string, marker: string): string[] {
   while (cursor < source.length) {
     const markerStart = source.indexOf(marker, cursor);
     if (markerStart < 0) break;
-    const open = source.indexOf("{", markerStart + marker.length);
-    if (open < 0) throw new Error(`missing opening brace after ${marker}`);
+    const suffixStart = markerStart + marker.length;
+    const nextTokenOffset = source.slice(suffixStart).search(/\S/);
+    if (nextTokenOffset < 0) break;
+    const open = suffixStart + nextTokenOffset;
+    if (source[open] !== "{") {
+      cursor = suffixStart;
+      continue;
+    }
     let depth = 0;
     let close = -1;
     for (let index = open; index < source.length; index += 1) {
@@ -89,6 +95,16 @@ function declarationsInBlock(source: string, marker: string, selector: string): 
 describe("Liquid Glass 静态约束", () => {
   const glass = readFileSync("src/ui/liquid-glass.css", "utf8");
   const style = readFileSync("src/ui/style.css", "utf8");
+  it("媒体块 helper 只匹配 marker 后空白接左花括号的精确查询", () => {
+    const fixture = `
+      @media (max-width: 600px), (max-height: 620px) { .combined { width: 1px; } }
+      @media (max-width: 600px) { .exact { width: 2px; } }
+    `;
+    const blocks = blockBodies(fixture, "@media (max-width: 600px)");
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]).toContain(".exact");
+    expect(blocks[0]).not.toContain(".combined");
+  });
   it("同时提供标准/WebKit blur 和无 blur 回退", () => {
     expect(glass).toContain("backdrop-filter: blur(var(--glass-blur))");
     expect(glass).toContain("-webkit-backdrop-filter: blur(var(--glass-blur))");
@@ -159,15 +175,16 @@ describe("Liquid Glass 静态约束", () => {
     expect(gameTop).toContain("padding: max(0.625rem, env(safe-area-inset-top) + 0.25rem) 1.75rem");
     const topActions = declarations(style, ".top-actions");
     expect(topActions).toContain("grid-template-areas");
-    const narrow = blockBodies(style, "@media (max-width: 420px), (max-height: 620px)")[0] ?? "";
+    const narrow = blockBodies(style, "@media (max-width: 600px), (max-height: 620px)")[0] ?? "";
     expect(narrow).toContain("grid-template-columns: auto minmax(0, 1fr)");
     expect(narrow).toContain("grid-template-columns: repeat(4, minmax(0, 1fr))");
-    expect(optionalDeclarations(narrow, ".game-top")).not.toContain("padding-inline");
-    const phone = declarationsInBlock(style, "@media (max-width: 420px)", ".game-top");
-    expect(phone).toContain("width: min(84vw, 22rem)");
+    expect(optionalDeclarations(narrow, ".game-top")).toBe("");
+    expect(narrow).not.toContain("width: clamp(");
+    const phoneBlocks = blockBodies(style, "@media (max-width: 600px)");
+    expect(phoneBlocks).toHaveLength(1);
+    const phone = declarationsInBlock(style, "@media (max-width: 600px)", ".game-top");
+    expect(phone).toContain("width: clamp(min(92vw, 294px), 79vw, 480px)");
     expect(phone).toContain("padding-inline: 0");
-    const smallPhone = declarationsInBlock(style, "@media (max-width: 360px)", ".game-top");
-    expect(smallPhone).toContain("width: min(92vw, 21rem)");
     expect(declarations(style, ".game-sound")).toContain("font-size: 1.25rem");
     expect(declarations(style, ".restart")).toContain("font-size: 1.5rem");
   });

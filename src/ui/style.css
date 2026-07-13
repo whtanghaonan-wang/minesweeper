@@ -1040,7 +1040,7 @@ html[data-reduced-transparency] .home-play {
   flex: 1;
 }
 
-@media (max-width: 420px), (max-height: 620px) {
+@media (max-width: 600px), (max-height: 620px) {
   .top-actions {
     grid-template-columns: auto minmax(0, 1fr);
     grid-template-areas:
@@ -1068,16 +1068,10 @@ html[data-reduced-transparency] .home-play {
   }
 }
 
-@media (max-width: 420px) {
+@media (max-width: 600px) {
   .game-top {
-    width: min(84vw, 22rem);
+    width: clamp(min(92vw, 294px), 79vw, 480px);
     padding-inline: 0;
-  }
-}
-
-@media (max-width: 360px) {
-  .game-top {
-    width: min(92vw, 21rem);
   }
 }
 
