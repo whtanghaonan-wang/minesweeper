@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, statSync, copyFileSync, writeFileSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, statSync, unlinkSync, copyFileSync, writeFileSync, readFileSync } from "node:fs";
 import { execFileSync, spawnSync } from "node:child_process";
 import { basename, dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
 
@@ -53,11 +53,13 @@ function readJson(path) {
 }
 
 function normalizeFingerprint(value) {
-  const normalized = value.replace(/[^0-9a-f]/gi, "").toLowerCase();
-  if (!/^[0-9a-f]{64}$/.test(normalized)) {
+  const trimmed = value.trim();
+  const compact = /^[0-9a-f]{64}$/i.test(trimmed);
+  const colonSeparated = /^(?:[0-9a-f]{2}:){31}[0-9a-f]{2}$/i.test(trimmed);
+  if (!compact && !colonSeparated) {
     throw new Error("ANDROID_CERT_SHA256 must be a SHA-256 certificate fingerprint");
   }
-  return normalized;
+  return trimmed.replaceAll(":", "").toLowerCase();
 }
 
 function runCapture(command, args, options = {}) {
@@ -130,6 +132,14 @@ function findFiles(directory, predicate) {
   return found;
 }
 
+function isReleaseApk(path) {
+  const normalizedPath = path.replaceAll("\\", "/");
+  const segments = normalizedPath.split("/");
+  const filename = segments.at(-1) ?? "";
+  return extname(filename).toLowerCase() === ".apk"
+    && segments.some((segment) => segment.toLowerCase() === "release");
+}
+
 function sha256(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
@@ -190,58 +200,82 @@ function main() {
   const aapt = resolveBuildTool(androidHome, "aapt");
   if (!existsSync(javaHome)) throw new Error(`JAVA_HOME path does not exist: ${javaHome}`);
 
+  const version = pkg.version;
+  const apkPath = resolve(outputDir, `minesweeper-v${version}-universal.apk`);
+  const checksumPath = resolve(outputDir, "SHA256SUMS.txt");
+  const metadataPath = resolve(outputDir, "build-metadata.json");
+  for (const artifactPath of [apkPath, checksumPath, metadataPath]) {
+    if (existsSync(artifactPath)) throw new Error(`Output precondition failed: ${basename(artifactPath)} already exists`);
+  }
+
   mkdirSync(outputDir, { recursive: true });
   runBuild();
 
   const apkOutputDir = resolve(root, "src-tauri/gen/android/app/build/outputs/apk");
-  const releaseApks = findFiles(apkOutputDir, (path) => extname(path).toLowerCase() === ".apk" && /release/i.test(path));
+  const releaseApks = findFiles(apkOutputDir, isReleaseApk);
   const universalApks = releaseApks.filter((path) => /universal/i.test(basename(path)));
   if (universalApks.length !== 1 || releaseApks.length !== 1) {
     throw new Error(`Expected exactly one universal release APK, found ${universalApks.length} universal and ${releaseApks.length} release APKs`);
   }
 
-  const version = pkg.version;
-  const apkPath = resolve(outputDir, `minesweeper-v${version}-universal.apk`);
-  copyFileSync(universalApks[0], apkPath);
+  const createdPaths = [];
+  let completed = false;
+  try {
+    copyFileSync(universalApks[0], apkPath);
+    createdPaths.push(apkPath);
 
-  const signerOutput = runCapture(apksigner, ["verify", "--verbose", "--print-certs", apkPath]);
-  const signerMatch = signerOutput.match(/certificate SHA-256 digest:\s*([0-9a-f: ]+)/i);
-  if (!signerMatch) throw new Error("Unable to read APK signer SHA-256 fingerprint");
-  const signerFingerprint = normalizeFingerprint(signerMatch[1]);
-  if (signerFingerprint !== expectedFingerprint) throw new Error("APK signer fingerprint does not match ANDROID_CERT_SHA256");
+    const signerOutput = runCapture(apksigner, ["verify", "--verbose", "--print-certs", apkPath]);
+    const signerMatch = signerOutput.match(/certificate SHA-256 digest:\s*([0-9a-f: ]+)/i);
+    if (!signerMatch) throw new Error("Unable to read APK signer SHA-256 fingerprint");
+    const signerFingerprint = normalizeFingerprint(signerMatch[1]);
+    if (signerFingerprint !== expectedFingerprint) throw new Error("APK signer fingerprint does not match ANDROID_CERT_SHA256");
 
-  const badging = runCapture(aapt, ["dump", "badging", apkPath]);
-  for (const required of [
-    `name='${expectedIdentifier}'`,
-    `versionName='${expectedVersion}'`,
-    `versionCode='${expectedVersionCode}'`,
-  ]) {
-    if (!badging.includes(required)) throw new Error(`APK badging missing ${required}`);
+    const badging = runCapture(aapt, ["dump", "badging", apkPath]);
+    for (const required of [
+      `name='${expectedIdentifier}'`,
+      `versionName='${expectedVersion}'`,
+      `versionCode='${expectedVersionCode}'`,
+    ]) {
+      if (!badging.includes(required)) throw new Error(`APK badging missing ${required}`);
+    }
+
+    const zipEntries = listZipEntries(apkPath).split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
+    for (const abi of requiredAbis) {
+      if (!zipEntries.some((entry) => entry.startsWith(`lib/${abi}/`))) throw new Error(`APK missing ABI lib/${abi}/`);
+    }
+
+    const artifactSha256 = sha256(apkPath);
+    const metadata = {
+      commit: commitSha(),
+      version,
+      identifier: expectedIdentifier,
+      versionCode: expectedVersionCode,
+      signerSha256: signerFingerprint,
+      abis: requiredAbis,
+      nodeVersion: process.version,
+      rustVersion: toolVersion("rustc", ["--version"]),
+      tauriVersion: toolVersion(process.platform === "win32" ? "npx.cmd" : "npx", ["tauri", "--version"]),
+      builtAtUtc: new Date().toISOString(),
+      apkFilename: basename(apkPath),
+      apkSha256: artifactSha256,
+    };
+    createdPaths.push(checksumPath);
+    writeFileSync(checksumPath, `${artifactSha256}  ${basename(apkPath)}\n`);
+    createdPaths.push(metadataPath);
+    writeFileSync(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
+    completed = true;
+    console.log(`Verified ${basename(apkPath)} (${artifactSha256})`);
+  } finally {
+    if (!completed) {
+      for (const artifactPath of createdPaths) {
+        try {
+          if (existsSync(artifactPath)) unlinkSync(artifactPath);
+        } catch {
+          // Preserve the original validation error without exposing any path details.
+        }
+      }
+    }
   }
-
-  const zipEntries = listZipEntries(apkPath).split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
-  for (const abi of requiredAbis) {
-    if (!zipEntries.some((entry) => entry.startsWith(`lib/${abi}/`))) throw new Error(`APK missing ABI lib/${abi}/`);
-  }
-
-  const artifactSha256 = sha256(apkPath);
-  const metadata = {
-    commit: commitSha(),
-    version,
-    identifier: expectedIdentifier,
-    versionCode: expectedVersionCode,
-    signerSha256: signerFingerprint,
-    abis: requiredAbis,
-    nodeVersion: process.version,
-    rustVersion: toolVersion("rustc", ["--version"]),
-    tauriVersion: toolVersion(process.platform === "win32" ? "npx.cmd" : "npx", ["tauri", "--version"]),
-    builtAtUtc: new Date().toISOString(),
-    apkFilename: basename(apkPath),
-    apkSha256: artifactSha256,
-  };
-  writeFileSync(resolve(outputDir, "SHA256SUMS.txt"), `${artifactSha256}  ${basename(apkPath)}\n`);
-  writeFileSync(resolve(outputDir, "build-metadata.json"), `${JSON.stringify(metadata, null, 2)}\n`);
-  console.log(`Verified ${basename(apkPath)} (${artifactSha256})`);
 }
 
 try {

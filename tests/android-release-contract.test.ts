@@ -28,4 +28,24 @@ describe("android-release.mjs contract", () => {
   it("rejects the artifacts parent itself as an output directory", () => {
     expect(source).toContain('outputRelative === ".."');
   });
+
+  it("imports the digest primitive used for artifact checksums", () => {
+    expect(source).toContain('import { createHash } from "node:crypto";');
+  });
+
+  it("matches release APKs by an exact release path segment", () => {
+    expect(source).toContain('segment.toLowerCase() === "release"');
+    expect(source).not.toContain("/release/i.test(path)");
+  });
+
+  it("accepts only strict SHA-256 fingerprint formats", () => {
+    expect(source).toContain("value.trim()");
+    expect(source).toContain("replaceAll(\":\", \"\")");
+    expect(source).not.toContain("replace(/[^0-9a-f]/gi, \"\")");
+  });
+
+  it("cleans artifacts created by a failed validation", () => {
+    expect(source).toContain("unlinkSync");
+    expect(source).toContain("finally");
+  });
 });
