@@ -661,6 +661,7 @@ export function installHomeLiquidSelection(
   }
 
   function onLostPointerCapture(event: Event): void {
+    if (event.target !== panel) return;
     const pointer = event as PointerEvent;
     const session = activeDrag;
     if (!session || pointer.pointerId !== session.pointerId) return;

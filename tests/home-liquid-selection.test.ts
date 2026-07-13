@@ -775,6 +775,65 @@ describe("installHomeLiquidSelection", () => {
     controller.destroy();
   });
 
+  it("ignores bubbled touch capture loss from the original selected button", () => {
+    const fixture = createFixture();
+    const setPointerCapture = vi.fn();
+    const hasPointerCapture = vi.fn(() => true);
+    const releasePointerCapture = vi.fn();
+    Object.defineProperties(fixture.panel, {
+      setPointerCapture: { configurable: true, value: setPointerCapture },
+      hasPointerCapture: { configurable: true, value: hasPointerCapture },
+      releasePointerCapture: { configurable: true, value: releasePointerCapture },
+    });
+    const controller = installHomeLiquidSelection(
+      fixture.panel,
+      fixture.indicator,
+      fixture.targets,
+      fixture.play,
+    );
+
+    dispatchPointer(fixture.play, "pointerdown", {
+      pointerId: 48,
+      pointerType: "touch",
+      clientX: 155,
+      clientY: 100,
+    });
+    dispatchPointer(window, "pointermove", {
+      pointerId: 48,
+      pointerType: "touch",
+      clientX: 220,
+      clientY: 130,
+    });
+    expect(setPointerCapture).toHaveBeenCalledTimes(1);
+    dispatchPointer(fixture.play, "lostpointercapture", {
+      pointerId: 48,
+      pointerType: "touch",
+    });
+
+    expect(fixture.panel.classList.contains("is-home-liquid-dragging")).toBe(true);
+    expect(releasePointerCapture).not.toHaveBeenCalled();
+    dispatchPointer(window, "pointermove", {
+      pointerId: 48,
+      pointerType: "touch",
+      clientX: 267,
+      clientY: 164,
+    });
+    dispatchPointer(window, "pointerup", {
+      pointerId: 48,
+      pointerType: "touch",
+      clientX: 267,
+      clientY: 164,
+    });
+
+    expect(fixture.panel.classList.contains("is-home-liquid-dragging")).toBe(false);
+    expect(releasePointerCapture).toHaveBeenCalledTimes(1);
+    expect(releasePointerCapture).toHaveBeenCalledWith(48);
+    expect(fixture.sound.classList.contains("is-home-selected")).toBe(true);
+    expect(fixture.soundActivate).toHaveBeenCalledTimes(1);
+    expect(fixture.playActivate).not.toHaveBeenCalled();
+    controller.destroy();
+  });
+
   it("keeps a sub-threshold Play press uncaptured and lets its normal click activate", () => {
     const fixture = createFixture();
     const setPointerCapture = vi.fn();
