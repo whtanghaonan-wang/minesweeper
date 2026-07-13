@@ -41,4 +41,19 @@ describe("Android bundle configuration", () => {
     const packageJson = JSON.parse(readFileSync("package.json", "utf8"));
     expect(packageJson.scripts.tauri).toBe("tauri");
   });
+
+  it("loads Android release signing only when local keystore properties exist", () => {
+    const gradle = readFileSync("src-tauri/gen/android/app/build.gradle.kts", "utf8");
+    expect(gradle).toContain('val keystorePropertiesFile = rootProject.file("keystore.properties")');
+    expect(gradle).toContain("val keystoreProperties = Properties()");
+    expect(gradle).toMatch(
+      /if\s*\(keystorePropertiesFile\.exists\(\)\)\s*\{\s*keystorePropertiesFile\.inputStream\(\)\.use\s*\{\s*keystoreProperties\.load\(it\)/s,
+    );
+    expect(gradle).toMatch(
+      /signingConfigs\s*\{[\s\S]*create\("release"\)[\s\S]*storeFile\s*=\s*file\(keystoreProperties\.getProperty\("storeFile"\)\)[\s\S]*storePassword\s*=\s*keystoreProperties\.getProperty\("password"\)[\s\S]*keyAlias\s*=\s*keystoreProperties\.getProperty\("keyAlias"\)[\s\S]*keyPassword\s*=\s*keystoreProperties\.getProperty\("password"\)/,
+    );
+    expect(gradle).toMatch(
+      /getByName\("release"\)\s*\{\s*if\s*\(keystorePropertiesFile\.exists\(\)\)\s*\{\s*signingConfig\s*=\s*signingConfigs\.getByName\("release"\)/s,
+    );
+  });
 });
