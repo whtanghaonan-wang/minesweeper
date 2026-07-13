@@ -58,6 +58,13 @@ function optionalDeclarations(source: string, selector: string): string {
   return source.match(new RegExp(`${selectorPattern(selector)}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
 }
 
+function exactRuleDeclarations(source: string, selector: string): string[] {
+  const matches = source.matchAll(
+    new RegExp(`(?:^|[{}])\\s*${selectorPattern(selector)}\\s*\\{([^}]*)\\}`, "g"),
+  );
+  return [...matches].map((match) => match[1]!);
+}
+
 function blockBodies(source: string, marker: string): string[] {
   const blocks: string[] = [];
   let cursor = 0;
@@ -165,6 +172,7 @@ describe("Liquid Glass 静态约束", () => {
     expect(lobe).toContain("border-radius: 999px");
     expect(lobe).toContain("backdrop-filter: blur(28px) saturate(180%)");
     expect(lobe).toContain("pointer-events: auto");
+    expect(lobe).not.toMatch(/(?:^|;)\s*opacity\s*:\s*0(?:\.0*)?\s*(?:;|$)/);
     expect(lobe).not.toContain("255, 171, 210");
 
     for (const selector of [
@@ -180,7 +188,7 @@ describe("Liquid Glass 静态约束", () => {
       expect(block).not.toContain("color: #fff");
     }
 
-    const target = declarations(style, ".home-liquid-target");
+    const target = declarations(style, ".home-panel .home-liquid-target");
     expect(target).toContain("background: transparent");
     expect(target).toContain("border: 0");
     expect(target).toContain("box-shadow: none");
@@ -220,12 +228,18 @@ describe("Liquid Glass 静态约束", () => {
   it("液化选中体与目标的层级、拖拽命中和颜色状态完整", () => {
     const panel = declarations(style, ".home-panel");
     const lobe = declarations(style, ".home-liquid-selection");
-    const target = declarations(style, ".home-liquid-target");
+    const target = declarations(style, ".home-panel .home-liquid-target");
     expect(panel).toContain("--home-selected-blue: #005fc7");
     expect(lobe).toContain("z-index: 1");
     expect(lobe).toContain("pointer-events: auto");
     expect(lobe).toContain("cursor: grab");
     expect(target).toContain("z-index: 3");
+    expect(style.indexOf(".home-panel .home-liquid-target")).toBeGreaterThan(
+      style.indexOf(".home-panel > :not(.home-liquid-selection)"),
+    );
+    for (const weakerRule of exactRuleDeclarations(style, ".home-liquid-target")) {
+      expect(weakerRule).not.toContain("z-index");
+    }
 
     const activeTargets = declarations(
       style,
