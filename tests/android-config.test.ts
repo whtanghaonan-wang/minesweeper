@@ -56,4 +56,23 @@ describe("Android bundle configuration", () => {
       /getByName\("release"\)\s*\{\s*if\s*\(keystorePropertiesFile\.exists\(\)\)\s*\{\s*signingConfig\s*=\s*signingConfigs\.getByName\("release"\)/s,
     );
   });
+
+  it("uses the approved flag artwork for adaptive and legacy launcher icons", () => {
+    const adaptive = "src-tauri/gen/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml";
+    const roundAdaptive = "src-tauri/gen/android/app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml";
+    for (const path of [adaptive, roundAdaptive]) {
+      expect(existsSync(path)).toBe(true);
+      const text = readFileSync(path, "utf8");
+      expect(text).toContain("@drawable/ic_launcher_background");
+      expect(text).toContain("@drawable/ic_launcher_foreground");
+    }
+    const foreground = readFileSync("src-tauri/gen/android/app/src/main/res/drawable-v24/ic_launcher_foreground.xml", "utf8");
+    expect(foreground).toContain("#3F3A34");
+    expect(foreground).toContain("#DD7B76");
+    expect(foreground).toContain("#A8C3A3");
+    for (const density of ["mdpi", "hdpi", "xhdpi", "xxhdpi", "xxxhdpi"]) {
+      const legacy = `src-tauri/gen/android/app/src/main/res/mipmap-${density}/ic_launcher.png`;
+      expect(readFileSync(legacy).subarray(1, 4).toString("ascii")).toBe("PNG");
+    }
+  });
 });
