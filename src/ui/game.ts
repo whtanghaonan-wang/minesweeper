@@ -31,6 +31,7 @@ import {
   type CellA11yState,
 } from "./board-grid";
 import { fmtTime } from "./format";
+import { icon, type IconName } from "./icons";
 import { restartFiniteAnimation, restartFiniteAnimations } from "./motion";
 import { createUiPrefs, type UiPrefsStore } from "./ui-prefs";
 import {
@@ -101,9 +102,10 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   const top = document.createElement("header");
   top.className = "game-top";
   const topActions = document.createElement("div");
-  topActions.className = "top-actions glass-compact glass-light";
+  topActions.className = "top-actions glass-compact glass-calm";
   topActions.dataset["liquidGlass"] = "";
   const backBtn = button("pill back", "←", exit);
+  backBtn.replaceChildren(icon("back"));
   backBtn.setAttribute("aria-label", "返回选关");
   const title = document.createElement("div");
   title.className = "game-title";
@@ -116,17 +118,29 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   const stats = document.createElement("div");
   stats.className = "game-stats";
   const mineStat = document.createElement("span");
-  mineStat.className = "pill stat num";
+  mineStat.className = "pill stat num mine-stat";
   mineStat.setAttribute("aria-live", "polite");
+  const mineValue = document.createElement("span");
+  mineStat.append(icon("mine"), mineValue);
   const timeStat = document.createElement("span");
-  timeStat.className = "pill stat num";
+  timeStat.className = "pill stat num time-stat";
+  const timeValue = document.createElement("span");
+  const timeLabel = document.createElement("span");
+  timeLabel.className = "stat-label";
+  timeLabel.textContent = "剩余时间";
+  const timeContent = document.createElement("span");
+  timeContent.className = "time-content";
+  timeContent.append(timeValue, timeLabel);
+  timeStat.append(icon("timer"), timeContent);
   stats.append(mineStat, timeStat);
   const soundBtn = button("pill stat game-sound", "", toggleSound);
-  stats.appendChild(soundBtn);
   const restartBtn = button("pill restart", "↻", restart);
+  restartBtn.replaceChildren(icon("restart"));
   restartBtn.setAttribute("aria-label", "重开");
-  stats.appendChild(restartBtn);
-  topActions.append(backBtn, title, stats);
+  const utilities = document.createElement("div");
+  utilities.className = "game-utilities";
+  utilities.append(restartBtn, soundBtn);
+  topActions.append(backBtn, title, utilities, stats);
   top.appendChild(topActions);
 
   const boardVp = document.createElement("div");
@@ -147,29 +161,30 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   const bottom = document.createElement("footer");
   bottom.className = "game-bottom";
   const bottomActions = document.createElement("div");
-  bottomActions.className = "bottom-actions glass-compact";
+  bottomActions.className = "bottom-actions glass-compact glass-calm";
   bottomActions.dataset["liquidGlass"] = "";
   const modeToggle = document.createElement("div");
   modeToggle.className = "mode-toggle";
   modeToggle.setAttribute("role", "group");
   modeToggle.setAttribute("aria-label", "点按模式");
-  const digBtn = tabButton("mode-btn tab-btn active", "⛏", "挖开", () => setMode("dig"));
-  const flagBtn = tabButton("mode-btn tab-btn", "🚩", "插旗", () => setMode("flag"));
+  const digBtn = tabButton("mode-btn tab-btn active", "dig", "挖开", () => setMode("dig"));
+  const flagBtn = tabButton("mode-btn tab-btn", "flag", "插旗", () => setMode("flag"));
   modeToggle.append(digBtn, flagBtn);
 
   const viewControls = document.createElement("div");
   viewControls.className = "view-controls";
   viewControls.setAttribute("role", "group");
   viewControls.setAttribute("aria-label", "棋盘显示尺寸");
-  const fitBtn = tabButton("view-mode-btn tab-btn", "🔲", "适合屏幕", () => setViewMode("fit"));
-  const operableBtn = tabButton("view-mode-btn tab-btn", "🔍", "可操作尺寸",
+  const fitBtn = tabButton("view-mode-btn tab-btn", "fit", "适合屏幕", () => setViewMode("fit"));
+  const operableBtn = tabButton("view-mode-btn tab-btn", "zoom", "放大操作",
     () => setViewMode("operable"));
+  operableBtn.title = "可操作尺寸：放大格子后可拖动棋盘";
   viewControls.append(fitBtn, operableBtn);
 
   bottomActions.replaceChildren(modeToggle, viewControls);
   const hint = document.createElement("p");
   hint.className = "pc-hint";
-  hint.textContent = "左键挖开 · 右键插旗 · 滚轮缩放 · 拖动平移";
+  hint.textContent = "左键按所选模式 · 右键插旗 · 滚轮缩放 · 拖动平移";
   bottom.append(bottomActions, hint);
   game.append(top, boardVp, bottom);
 
@@ -395,7 +410,7 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
             ? action.alt
               ? mode === "dig" ? "flag" : "dig"
               : mode
-            : action.alt ? "flag" : "dig";
+            : action.alt ? "flag" : mode;
           if (action.touch && action.alt) navigator.vibrate?.(10);
           act(downCellLogical, nextAction);
           break;
@@ -557,8 +572,9 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   }
 
   function syncSoundBtn(): void {
-    soundBtn.textContent = isMuted() ? "🔇" : "🔊";
+    soundBtn.replaceChildren(icon(isMuted() ? "muted" : "sound"));
     soundBtn.setAttribute("aria-label", isMuted() ? "开启音效" : "关闭音效");
+    soundBtn.setAttribute("aria-pressed", String(!isMuted()));
   }
 
   function toggleSound(): void {
@@ -590,13 +606,14 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
   }
 
   function updateTimeDisplay(left: number): void {
-    timeStat.textContent = `⏱ ${fmtTime(left)}`;
+    timeValue.textContent = fmtTime(left);
     timeStat.classList.toggle("low", left <= 30);
   }
 
   function updateStats(): void {
     const left = board === null ? level.mines - preFlags.size : level.mines - flaggedCount(board);
-    mineStat.textContent = `💣 ${left}`;
+    mineValue.textContent = String(left);
+    mineStat.setAttribute("aria-label", `剩余雷数 ${left}`);
   }
 
   function win(): void {
@@ -782,18 +799,15 @@ export function showGame(root: HTMLElement, deps: GameDeps): void {
     return btn;
   }
 
-  /** Tab 式按钮:图标在上标签在下(底栏参照 iOS 玻璃 Tab 栏设计) */
+  /** Mode and zoom controls share one consistent icon treatment. */
   function tabButton(
     cls: string,
-    icon: string,
+    iconName: IconName,
     label: string,
     onClick: () => void,
   ): HTMLButtonElement {
     const btn = button(cls, "", onClick);
-    const iconEl = document.createElement("span");
-    iconEl.className = "tab-icon";
-    iconEl.setAttribute("aria-hidden", "true");
-    iconEl.textContent = icon;
+    const iconEl = icon(iconName, "tab-icon");
     const labelEl = document.createElement("span");
     labelEl.className = "tab-label";
     labelEl.textContent = label;

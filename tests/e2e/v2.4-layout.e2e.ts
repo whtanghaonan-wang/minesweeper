@@ -1,516 +1,110 @@
 import { expect, test, type Page } from "@playwright/test";
+import { mkdirSync } from "node:fs";
 
-type Rect = { x: number; y: number; width: number; height: number };
+const save = {
+  version: 3, unlockedLevel: 11,
+  bestTimes: Object.fromEntries(Array.from({ length: 10 }, (_, i) => [i + 1, 256])),
+  soundOn: true, endless: { streak: 0, bestStreak: 0 },
+};
 
-const EPSILON = 1;
-const LIQUID_GEOMETRY_TOLERANCE = 2;
-const LIQUID_TARGET_PADDING = 5;
-const LIQUID_MIN_SIZE = 48;
-const HOME_CONTENT = [
-  ".home-liquid-selection",
-  ".home-stats",
-  ".home-stats > span",
-  ".home-tools",
-  ".home-tools > button",
-  ".home-bar",
-  ".home-play",
-  ".home-secondary-actions",
-  ".home-secondary-actions > button",
-] as const;
+test.beforeEach(async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.addInitScript(data => {
+    localStorage.setItem("minesweeper-save-v3", JSON.stringify(data));
+    localStorage.setItem("minesweeper-ui-prefs-v1", JSON.stringify({ largeBoardHintSeen: true, reducedTransparency: false }));
+  }, save);
+});
 
-const HOME_TARGETS = [
-  ".home-play",
-  ".home-select",
-  ".home-endless",
-  ".sound-btn",
-  ".transparency-btn",
-] as const;
-
-function expectInside(inner: Rect, outer: Rect): void {
-  expect(inner.x).toBeGreaterThanOrEqual(outer.x - EPSILON);
-  expect(inner.y).toBeGreaterThanOrEqual(outer.y - EPSILON);
-  expect(inner.x + inner.width).toBeLessThanOrEqual(outer.x + outer.width + EPSILON);
-  expect(inner.y + inner.height).toBeLessThanOrEqual(outer.y + outer.height + EPSILON);
-}
-
-function rectanglesOverlap(a: Rect, b: Rect): boolean {
-  return a.x + a.width > b.x + EPSILON
-    && b.x + b.width > a.x + EPSILON
-    && a.y + a.height > b.y + EPSILON
-    && b.y + b.height > a.y + EPSILON;
-}
-
-async function boxesFor(page: Page, selector: string): Promise<Rect[]> {
-  const locator = page.locator(selector);
-  const boxes: Rect[] = [];
-  for (let index = 0; index < await locator.count(); index += 1) {
-    boxes.push((await locator.nth(index).boundingBox())!);
-  }
-  return boxes;
-}
-
-async function expectHomeContentInsidePanel(page: Page): Promise<void> {
-  const panel = (await page.locator(".home-panel").boundingBox())!;
-  for (const selector of HOME_CONTENT) {
-    for (const box of await boxesFor(page, selector)) expectInside(box, panel);
-  }
-}
-
-async function expectStatsAndToolsSeparate(page: Page): Promise<void> {
-  const stats = await boxesFor(page, ".home-stats > span");
-  const tools = await boxesFor(page, ".home-tools > button");
-  for (const stat of stats) {
-    for (const tool of tools) expect(rectanglesOverlap(stat, tool)).toBe(false);
-  }
-}
-
-async function expectTouchTargets(page: Page): Promise<void> {
-  const buttons = page.locator(".home-panel button");
-  await expect(buttons).toHaveCount(5);
-  for (let index = 0; index < await buttons.count(); index += 1) {
-    const box = await buttons.nth(index).boundingBox();
-    expect(box!.width).toBeGreaterThanOrEqual(44);
-    expect(box!.height).toBeGreaterThanOrEqual(44);
-  }
-}
-
-async function expectLiquidCoversSelectedTarget(page: Page): Promise<void> {
-  await expect.poll(async () => {
-    const liquid = await page.locator(".home-liquid-selection").boundingBox();
-    const target = await page.locator(".is-home-selected").boundingBox();
-    if (!liquid || !target) return null;
-    const expectedWidth = Math.max(
-      LIQUID_MIN_SIZE,
-      target.width + LIQUID_TARGET_PADDING * 2,
-    );
-    const expectedHeight = Math.max(
-      LIQUID_MIN_SIZE,
-      target.height + LIQUID_TARGET_PADDING * 2,
-    );
-    return {
-      centerX: Math.abs(
-        liquid.x + liquid.width / 2 - target.x - target.width / 2,
-      ) <= LIQUID_GEOMETRY_TOLERANCE,
-      centerY: Math.abs(
-        liquid.y + liquid.height / 2 - target.y - target.height / 2,
-      ) <= LIQUID_GEOMETRY_TOLERANCE,
-      width: Math.abs(liquid.width - expectedWidth) <= LIQUID_GEOMETRY_TOLERANCE,
-      height: Math.abs(liquid.height - expectedHeight) <= LIQUID_GEOMETRY_TOLERANCE,
-      coversLeft: liquid.x <= target.x - LIQUID_TARGET_PADDING + LIQUID_GEOMETRY_TOLERANCE,
-      coversRight: liquid.x + liquid.width >= target.x + target.width
-        + LIQUID_TARGET_PADDING - LIQUID_GEOMETRY_TOLERANCE,
-      coversTop: liquid.y <= target.y - LIQUID_TARGET_PADDING + LIQUID_GEOMETRY_TOLERANCE,
-      coversBottom: liquid.y + liquid.height >= target.y + target.height
-        + LIQUID_TARGET_PADDING - LIQUID_GEOMETRY_TOLERANCE,
-    };
-  }, { message: "liquid lobe should settle around the selected target with 5px padding" })
-    .toEqual({
-      centerX: true,
-      centerY: true,
-      width: true,
-      height: true,
-      coversLeft: true,
-      coversRight: true,
-      coversTop: true,
-      coversBottom: true,
-    });
-}
-
-async function dragHomeLiquid(
-  page: Page,
-  targetSelector: string,
-  edge: "left" | "right",
-): Promise<void> {
-  const liquid = page.locator(".home-liquid-selection");
-  let start = { x: 0, y: 0 };
-  await expect.poll(async () => {
-    const settled = await liquid.evaluate((element) => (
-      element.getAnimations().every((animation) => animation.playState === "finished")
-    ));
-    if (!settled) return false;
-    const box = await liquid.boundingBox();
-    if (!box) return false;
-    start = {
-      x: edge === "left" ? box.x + 2 : box.x + box.width - 2,
-      y: box.y + box.height / 2,
-    };
-    return page.evaluate(({ x, y }) => (
-      document.elementFromPoint(x, y)?.classList.contains("home-liquid-selection") ?? false
-    ), start);
-  }, { message: `${edge} lobe edge should become exposed` }).toBe(true);
-
-  const target = await page.locator(targetSelector).boundingBox();
-  expect(target).not.toBeNull();
-
-  await page.mouse.move(start.x, start.y);
-  await page.mouse.down();
-  await page.mouse.move(
-    target!.x + target!.width / 2,
-    target!.y + target!.height / 2,
-    { steps: 14 },
+async function expectUsable(page: Page): Promise<void> {
+  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+    await page.evaluate(() => document.documentElement.clientWidth),
   );
-  await page.mouse.up();
-  await expect(page.locator(targetSelector)).toHaveClass(/is-home-selected/);
-}
-
-async function expectLowWideHomePanel(page: Page, width: number): Promise<Rect> {
-  await page.setViewportSize({ width, height: 900 });
-  await page.goto("/");
-  const panel = (await page.locator(".home-panel").boundingBox())!;
-  expect(panel.width / panel.height, `${width}px panel=${JSON.stringify(panel)}`)
-    .toBeGreaterThan(3.5);
-  expect(panel.height, `${width}px panel=${JSON.stringify(panel)}`).toBeLessThan(190);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth), `${width}px scrollWidth`)
-    .toBe(width);
-  await expectHomeContentInsidePanel(page);
-  await expectTouchTargets(page);
-  return panel;
-}
-
-async function openGame(page: Page, width: number, height = 844): Promise<void> {
-  await page.setViewportSize({ width, height });
-  await page.goto("/");
-  await page.locator(".home-play").click();
-  await expect(page.locator(".top-actions")).toBeVisible();
-}
-
-async function expectGameTopGeometry(page: Page, width: number, height = 844): Promise<{
-  top: Rect;
-  title: Rect;
-  stats: Rect;
-}> {
-  await openGame(page, width, height);
-  const top = (await page.locator(".top-actions").boundingBox())!;
-  const title = (await page.locator(".game-title").boundingBox())!;
-  const stats = (await page.locator(".game-stats").boundingBox())!;
-  expect(
-    rectanglesOverlap(title, stats),
-    `${width}x${height} title=${JSON.stringify(title)} stats=${JSON.stringify(stats)}`,
-  ).toBe(false);
-  for (const content of await boxesFor(page, ".game-title > *")) {
-    expect(
-      rectanglesOverlap(content, stats),
-      `${width}x${height} title content=${JSON.stringify(content)} stats=${JSON.stringify(stats)}`,
-    ).toBe(false);
-  }
-  expectInside(top, { x: 0, y: 0, width, height });
-  expect(await page.evaluate(() => document.documentElement.scrollWidth), `${width}px scrollWidth`)
-    .toBe(width);
-  return { top, title, stats };
-}
-
-async function expectGameSlotsTouchable(page: Page): Promise<Rect[]> {
-  const slots = await boxesFor(page, ".game-stats > *");
-  expect(slots).toHaveLength(4);
-  for (const slot of slots) {
-    expect(slot.width).toBeGreaterThanOrEqual(44);
-    expect(slot.height).toBeGreaterThanOrEqual(44);
-  }
-  return slots;
-}
-
-test("桌面首页是低矮横向胶囊且版本号在表面外", async ({ page }) => {
-  await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/");
-  const panel = page.locator(".home-panel");
-  const box = await panel.boundingBox();
-  expect(box!.width).toBeGreaterThan(700);
-  expect(box!.height).toBeLessThan(160);
-  expect(box!.width / box!.height).toBeGreaterThan(4);
-  expect(await panel.evaluate((el) => getComputedStyle(el).borderRadius)).toBe("999px");
-  await expect(page.locator(".home > .home-ver")).toBeVisible();
-});
-
-test("首页只有一团选中玻璃且所有空闲按钮透明", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-
-  const panel = page.locator(".home-panel");
-  const liquid = page.locator(".home-liquid-selection");
-  await expect(page.locator("[data-liquid-glass]")).toHaveCount(1);
-  await expect(liquid).toHaveCount(1);
-  await expect(page.locator(".home-play")).toHaveClass(/is-home-selected/);
-
-  for (const selector of HOME_TARGETS) {
-    const style = await page.locator(selector).evaluate((element) => {
-      const computed = getComputedStyle(element);
-      return {
-        backgroundColor: computed.backgroundColor,
-        borderTopWidth: computed.borderTopWidth,
-      };
-    });
-    expect(style.backgroundColor, selector).toBe("rgba(0, 0, 0, 0)");
-    expect(style.borderTopWidth, selector).toBe("0px");
-  }
-
-  const panelBox = await panel.boundingBox();
-  const liquidBox = await liquid.boundingBox();
-  expect(panelBox).not.toBeNull();
-  expect(liquidBox).not.toBeNull();
-  expectInside(liquidBox!, panelBox!);
-  const opacity = await liquid.evaluate((element) => Number(getComputedStyle(element).opacity));
-  expect(opacity).toBeGreaterThan(0);
-});
-
-test("未选声音按钮按下时先更新玻璃光学且仍只走原生单击", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  const panel = page.locator(".home-panel");
-  const sound = page.locator(".sound-btn");
-  const beforeLabel = await sound.getAttribute("aria-label");
-  const expectedLabel = beforeLabel === "关闭音效" ? "开启音效" : "关闭音效";
-  const before = await panel.evaluate((element) => [
-    "--glass-x",
-    "--glass-y",
-    "--glass-dx",
-    "--glass-dy",
-  ].map((property) => (element as HTMLElement).style.getPropertyValue(property)));
-  const soundBox = await sound.boundingBox();
-  expect(soundBox).not.toBeNull();
-  const point = {
-    x: soundBox!.x + soundBox!.width * 0.31,
-    y: soundBox!.y + soundBox!.height * 0.67,
-  };
-  const panelBox = await panel.evaluate((element) => {
-    const html = element as HTMLElement;
-    const bounds = html.getBoundingClientRect();
-    return {
-      left: bounds.left + html.clientLeft,
-      top: bounds.top + html.clientTop,
-      width: html.clientWidth,
-      height: html.clientHeight,
-    };
-  });
-  const normalizedX = Math.max(0, Math.min(1, (point.x - panelBox.left) / panelBox.width));
-  const normalizedY = Math.max(0, Math.min(1, (point.y - panelBox.top) / panelBox.height));
-
-  await page.mouse.move(point.x, point.y);
-  await page.mouse.down();
-  const during = await panel.evaluate((element) => [
-    "--glass-x",
-    "--glass-y",
-    "--glass-dx",
-    "--glass-dy",
-  ].map((property) => (element as HTMLElement).style.getPropertyValue(property)));
-
-  expect(during.every((value) => value !== "" && Number.isFinite(Number.parseFloat(value))))
-    .toBe(true);
-  expect(during.every((value, index) => value !== before[index])).toBe(true);
-  expect(Math.abs(Number.parseFloat(during[0]!) - normalizedX * 100)).toBeLessThanOrEqual(1);
-  expect(Math.abs(Number.parseFloat(during[1]!) - normalizedY * 100)).toBeLessThanOrEqual(1);
-  expect(Math.abs(Number.parseFloat(during[2]!) - (normalizedX - 0.5) * 2))
-    .toBeLessThanOrEqual(0.02);
-  expect(Math.abs(Number.parseFloat(during[3]!) - (normalizedY - 0.5) * 2))
-    .toBeLessThanOrEqual(0.02);
-  await expect(panel).not.toHaveClass(/is-home-liquid-dragging/);
-  await expect(sound).not.toHaveClass(/is-home-selected/);
-  expect(await panel.evaluate((element) => element.hasPointerCapture?.(1) ?? false)).toBe(false);
-
-  await page.mouse.up();
-  await expect(sound).toHaveClass(/is-home-selected/);
-  await expect(sound).toHaveAttribute("aria-label", expectedLabel);
-});
-
-test("默认开始按钮可单击且已选中的即时按钮可重复执行", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  await page.locator(".home-play").click();
-  await expect(page.locator(".top-actions")).toBeVisible();
-
-  await page.goto("/");
-  const sound = page.locator(".sound-btn");
-  const originalLabel = await sound.getAttribute("aria-label");
-  await sound.click();
-  await expect(sound).toHaveClass(/is-home-selected/);
-  await expect(sound).not.toHaveAttribute("aria-label", originalLabel!);
-  await sound.click();
-  await expect(sound).toHaveAttribute("aria-label", originalLabel!);
-  await expect(sound).toHaveClass(/is-home-selected/);
-});
-
-test("已选声音轻点后立即点击玻璃按钮不会被旧兼容点击吞掉", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  const sound = page.locator(".sound-btn");
-  const transparency = page.locator(".transparency-btn");
-  await sound.click({ force: true });
-  await expect(sound).toHaveClass(/is-home-selected/);
-
-  const soundBefore = await sound.getAttribute("aria-label");
-  const transparencyBefore = await transparency.getAttribute("aria-pressed");
-  await sound.click({ force: true });
-  await transparency.click({ force: true });
-
-  await expect(sound).not.toHaveAttribute("aria-label", soundBefore!);
-  await expect(transparency).toHaveClass(/is-home-selected/);
-  await expect(transparency).not.toHaveAttribute("aria-pressed", transparencyBefore!);
-});
-
-test("小胶囊边缘可连续拖拽 20 次且不会残留拖拽状态", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  const sound = page.locator(".sound-btn");
-  const transparency = page.locator(".transparency-btn");
-
-  for (let index = 0; index < 20; index += 1) {
-    const isSound = index % 2 === 0;
-    const target = isSound ? sound : transparency;
-    const stateAttribute = isSound ? "aria-label" : "aria-pressed";
-    const before = await target.getAttribute(stateAttribute);
-    await dragHomeLiquid(
-      page,
-      isSound ? ".sound-btn" : ".transparency-btn",
-      isSound ? "left" : "right",
-    );
-    await expect(target).not.toHaveAttribute(stateAttribute, before!);
-    await expect(page.locator(".home-panel")).not.toHaveClass(/is-home-liquid-dragging/);
-    await expect(page.locator(".is-home-candidate")).toHaveCount(0);
-  }
-});
-
-test("lostpointercapture 后的新 pointerId 仍能拖拽", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  const play = await page.locator(".home-play").boundingBox();
-  const sound = await page.locator(".sound-btn").boundingBox();
-  expect(play).not.toBeNull();
-  expect(sound).not.toBeNull();
-
-  await page.locator(".home-play").dispatchEvent("pointerdown", {
-    pointerId: 71,
-    pointerType: "touch",
-    isPrimary: true,
-    clientX: play!.x + play!.width / 2,
-    clientY: play!.y + play!.height / 2,
-  });
-  await page.locator(".home-panel").dispatchEvent("lostpointercapture", {
-    pointerId: 71,
-    pointerType: "touch",
-    isPrimary: true,
-  });
-  await page.locator(".home-play").dispatchEvent("pointerdown", {
-    pointerId: 72,
-    pointerType: "touch",
-    isPrimary: true,
-    clientX: play!.x + play!.width / 2,
-    clientY: play!.y + play!.height / 2,
-  });
-  await page.locator("body").dispatchEvent("pointermove", {
-    pointerId: 72,
-    pointerType: "touch",
-    isPrimary: true,
-    clientX: sound!.x + sound!.width / 2,
-    clientY: sound!.y + sound!.height / 2,
-  });
-  await page.locator("body").dispatchEvent("pointerup", {
-    pointerId: 72,
-    pointerType: "touch",
-    isPrimary: true,
-    clientX: sound!.x + sound!.width / 2,
-    clientY: sound!.y + sound!.height / 2,
-  });
-
-  await expect(page.locator(".sound-btn")).toHaveClass(/is-home-selected/);
-  await expect(page.locator(".home-panel")).not.toHaveClass(/is-home-liquid-dragging/);
-  await expect(page.locator(".is-home-candidate")).toHaveCount(0);
-});
-
-test("390px 首页完整可触控且不横向溢出", async ({ page }) => {
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/");
-  const buttons = page.locator(".home-panel button");
-  for (let index = 0; index < await buttons.count(); index += 1) {
-    const box = await buttons.nth(index).boundingBox();
+  for (const button of await page.locator('button:not(.cell):visible').all()) {
+    const box = await button.boundingBox();
+    expect(box, await button.getAttribute('aria-label') ?? await button.innerText()).not.toBeNull();
     expect(box!.width).toBeGreaterThanOrEqual(44);
     expect(box!.height).toBeGreaterThanOrEqual(44);
+    expect(box!.x).toBeGreaterThanOrEqual(-1);
+    expect(box!.x + box!.width).toBeLessThanOrEqual(await page.evaluate(() => innerWidth) + 1);
   }
-  const stats = (await page.locator(".home-stats").boundingBox())!;
-  const tools = (await page.locator(".home-tools").boundingBox())!;
-  expect(
-    stats.y < tools.y + tools.height && tools.y < stats.y + stats.height,
-    `stats=${JSON.stringify(stats)} tools=${JSON.stringify(tools)}`,
-  ).toBe(true);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
-});
+}
 
-test("390px 游戏顶栏收窄、四槽等宽且使用 14px 轻玻璃", async ({ page }) => {
-  await openGame(page, 390);
-  const topActions = page.locator(".top-actions");
-  const topBox = (await topActions.boundingBox())!;
-  expect(topBox.width).toBeGreaterThanOrEqual(302);
-  expect(topBox.width).toBeLessThanOrEqual(314);
-
-  const slots = await expectGameSlotsTouchable(page);
-  const slotWidths = slots.map(({ width }) => width);
-  expect(Math.max(...slotWidths) - Math.min(...slotWidths)).toBeLessThan(1);
-
-  const back = (await page.getByRole("button", { name: "返回选关" }).boundingBox())!;
-  expect(back.width).toBeGreaterThanOrEqual(44);
-  expect(back.height).toBeGreaterThanOrEqual(44);
-  const filters = await topActions.evaluate((element) => {
-    const computed = getComputedStyle(element);
-    return `${computed.backdropFilter} ${computed.getPropertyValue("-webkit-backdrop-filter")}`;
-  });
-  expect(filters.toLowerCase()).toContain("blur(14px)");
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(390);
-});
-
-test("320px 游戏顶栏不溢出且四槽保持 44px 可触控", async ({ page }) => {
-  await openGame(page, 320);
-  const topBox = (await page.locator(".top-actions").boundingBox())!;
-  expect(topBox.x).toBeGreaterThanOrEqual(0);
-  expect(topBox.x + topBox.width).toBeLessThanOrEqual(320 + EPSILON);
-  await expectGameSlotsTouchable(page);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(320);
-});
-
-test("420/421 与 600/601px 游戏顶栏平滑过渡且内容不重叠", async ({ page }) => {
-  const geometries = new Map<number, Awaited<ReturnType<typeof expectGameTopGeometry>>>();
-  for (const width of [420, 421, 600, 601]) {
-    geometries.set(width, await expectGameTopGeometry(page, width));
-  }
-  expect(Math.abs(geometries.get(420)!.top.width - geometries.get(421)!.top.width))
-    .toBeLessThan(3);
-  expect(Math.abs(geometries.get(600)!.top.width - geometries.get(601)!.top.width))
-    .toBeLessThan(48);
-});
-
-test("1024x600 短桌面保持双行顶栏且标题和统计栏不重叠", async ({ page }) => {
-  await expectGameTopGeometry(page, 1024, 600);
-});
-
-test("721–1040px 首页保持低矮宽胶囊且内容完整可触控", async ({ page }) => {
-  for (const width of [721, 768, 900, 1024, 1040]) await expectLowWideHomePanel(page, width);
-});
-
-test("720/721px 只切换布局层级且两侧都不溢出", async ({ page }) => {
-  await page.setViewportSize({ width: 720, height: 900 });
-  await page.goto("/");
-  await expectHomeContentInsidePanel(page);
-  await expectTouchTargets(page);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(720);
-
-  await expectLowWideHomePanel(page, 721);
-});
-
-test("1040/1041px 均为低矮宽胶囊且断点前后尺寸平稳", async ({ page }) => {
-  const below = await expectLowWideHomePanel(page, 1040);
-  const above = await expectLowWideHomePanel(page, 1041);
-  expect(Math.abs(below.width - above.width)).toBeLessThan(above.width * 0.2);
-  expect(Math.abs(below.height - above.height)).toBeLessThan(above.height * 0.6);
-});
-
-for (const width of [320, 360, 361, 370, 390, 420]) {
-  test(`${width}px 且 200% 根字号时内容不重叠、不溢出且可触控`, async ({ page }) => {
-    await page.setViewportSize({ width, height: 844 });
-    await page.goto("/");
-    await page.addStyleTag({ content: "html { font-size: 200% !important; }" });
-    const stats = (await page.locator(".home-stats").boundingBox())!;
-    expect(stats.width).toBeGreaterThan(0);
-    await expectLiquidCoversSelectedTarget(page);
-    await expectHomeContentInsidePanel(page);
-    await expectStatsAndToolsSeparate(page);
-    await expectTouchTargets(page);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(width);
+for (const [width, height] of [[320,568], [390,844], [600,844], [844,390], [1024,600], [1440,900]]) {
+  test(`${width}×${height} 首页与游戏控件完整且棋盘保留可用空间`, async ({ page }, testInfo) => {
+    const errors: string[] = [];
+    page.on('pageerror', error => errors.push(error.message));
+    await page.setViewportSize({ width, height });
+    await page.goto('/');
+    await expect(page.locator('.home-vine')).toBeVisible();
+    await expect.poll(() => page.locator('.home-vine').evaluate((image: HTMLImageElement) => image.complete && image.naturalWidth > 0)).toBe(true);
+    await expectUsable(page);
+    await expect(page.locator('.home-play')).toContainText('第 11 关');
+    await expect(page.locator('.home-endless')).toBeDisabled();
+    await expect(page.locator('.home-panel .home-tools')).toHaveCount(0);
+    const screenshotDir = `artifacts/ui/${testInfo.project.name}`;
+    mkdirSync(screenshotDir, { recursive: true });
+    await page.screenshot({ path: `${screenshotDir}/home-${width}.png`, fullPage: true });
+    await page.locator('.home-play').click();
+    await expect(page.locator('.game-title')).toContainText('第 11 关');
+    await expect(page.locator('.time-stat')).toContainText('7:30');
+    await expectUsable(page);
+    const top = (await page.locator('.game-top').boundingBox())!;
+    const bottom = (await page.locator('.game-bottom').boundingBox())!;
+    expect(bottom.y - top.y - top.height).toBeGreaterThan(80);
+    const title = (await page.locator('.game-title').boundingBox())!;
+    const utilities = (await page.locator('.game-utilities').boundingBox())!;
+    expect(title.x + title.width).toBeLessThanOrEqual(utilities.x + 1);
+    const mode = (await page.locator('.mode-toggle').boundingBox())!;
+    const view = (await page.locator('.view-controls').boundingBox())!;
+    expect(mode.x + mode.width <= view.x + 1 || mode.y + mode.height <= view.y + 1).toBe(true);
+    const fit = page.getByRole('button', { name: '适合屏幕', exact: true });
+    await fit.click();
+    await expect(fit).toHaveAttribute('aria-pressed', 'true');
+    await expect.poll(async () => {
+      const board = (await page.locator('.board').boundingBox())!;
+      return board.y >= top.y + top.height - 1 && board.y + board.height <= bottom.y + 1;
+    }, { message: '完整棋盘应在上下工具栏之间稳定显示' }).toBe(true);
+    await expect(page.getByRole('gridcell')).toHaveCount(308);
+    await page.evaluate(() => new Promise<void>(resolve => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+    await page.screenshot({ path: `${screenshotDir}/game-${width}.png`, fullPage: true, animations: 'disabled' });
+    expect(errors).toEqual([]);
   });
 }
+
+test('桌面鼠标左键执行所选模式，右键保留快捷插旗', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/');
+  await page.locator('.home-play').click();
+  await page.getByRole('button', { name: '插旗', exact: true }).click();
+  const first = page.getByRole('gridcell').first();
+  await first.click();
+  await expect(first).toHaveAttribute('aria-label', /已插旗/);
+  await expect(page.locator('.cell.open')).toHaveCount(0);
+  await expect(page.locator('.mine-stat')).toHaveAttribute('aria-label', '剩余雷数 57');
+  await first.click({ button: 'right' });
+  await expect(first).toHaveAttribute('aria-label', /未揭开/);
+  await page.getByRole('button', { name: '挖开', exact: true }).click();
+  await page.getByRole('gridcell').last().click();
+  await expect(page.locator('.cell.open').first()).toBeVisible();
+});
+
+test('工具即时响应、持久化，且挖开与显示模式独立', async ({ page }) => {
+  await page.setViewportSize({ width:390, height:844 });
+  await page.goto('/');
+  await page.getByRole('button', { name:'关闭音效' }).click();
+  await expect(page.getByRole('button', { name:'开启音效' })).toHaveAttribute('aria-pressed', 'false');
+  expect(await page.evaluate(() => JSON.parse(localStorage.getItem('minesweeper-save-v3')!).soundOn)).toBe(false);
+  await page.getByRole('button', { name:'降低透明度' }).click();
+  await expect(page.locator('html')).toHaveAttribute('data-reduced-transparency','true');
+  await page.locator('.home-play').click();
+  await page.getByRole('button', { name:'插旗', exact:true }).click();
+  await page.getByRole('button', { name:'放大操作', exact:true }).click();
+  await expect(page.getByRole('button', { name:'插旗', exact:true })).toHaveAttribute('aria-pressed','true');
+  await expect(page.getByRole('button', { name:'挖开', exact:true })).toHaveAttribute('aria-pressed','false');
+  await expect(page.getByRole('button', { name:'放大操作', exact:true })).toHaveAttribute('aria-pressed','true');
+  await page.getByRole('button', { name:'适合屏幕', exact:true }).click();
+  await expect(page.getByRole('button', { name:'插旗', exact:true })).toHaveAttribute('aria-pressed','true');
+  await page.getByRole('button', { name:'重开', exact:true }).click();
+  await expect(page.locator('.time-stat')).toContainText('7:30');
+  await expect(page.getByRole('button', { name:'挖开', exact:true })).toHaveAttribute('aria-pressed','true');
+});

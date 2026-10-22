@@ -206,3 +206,21 @@ html[data-reduced-transparency] [data-liquid-glass]::after { display: none; }
   [data-liquid-glass].glass-compact { background: rgba(247,248,244,.92); }
   [data-liquid-glass].glass-tinted { background: #315c3e; color: #fff; }
 }
+
+/* Selected clear-glass direction: a quiet surface, not an outlined capsule. */
+[data-liquid-glass].glass-calm {
+  --glass-blur: 18px;
+  --glass-saturate: 115%;
+  --glass-tint: rgba(255, 254, 249, 0.56);
+  --glass-tint-strong: rgba(255, 254, 249, 0.58);
+  --glass-prism-a: rgba(166, 196, 168, 0.10);
+  --glass-prism-b: rgba(202, 212, 194, 0.08);
+  --glass-prism-c: rgba(237, 230, 216, 0.08);
+  --glass-elevation: inset 0 1px 0 rgba(255, 255, 255, 0.75), 0 8px 26px rgba(66, 74, 59, 0.045);
+  border-color: rgba(255, 255, 255, 0.42);
+}
+[data-liquid-glass].glass-calm::before { opacity: 0.25; }
+[data-liquid-glass].glass-calm::after { opacity: 0.18; }
+@media (forced-colors: active), (prefers-contrast: more) {
+  [data-liquid-glass].glass-calm { border-color: currentColor; }
+}

@@ -114,10 +114,11 @@ function hex(value: [number, number, number]): string {
 }
 
 describe("v2.3 可访问颜色", () => {
-  it("首页选中蓝在透明和实色玻璃背景均达到 4.5:1", () => {
-    const selected = cssVar("--home-selected-blue");
-    for (const background of ["#ffffff", "#f2efe9", "#d7e2d9"]) {
-      expect(contrast(selected, background), background).toBeGreaterThanOrEqual(4.5);
+  it("绿色主按钮白字和模式选中文字达到 4.5:1", () => {
+    const primary = declarations(".home-play");
+    expect(cssContrast(property(primary, "color"), property(primary, "background"))).toBeGreaterThanOrEqual(4.5);
+    for (const background of ["#d8e5d8", "#e0e8dc"]) {
+      expect(contrast(cssVar("--focus"), background)).toBeGreaterThanOrEqual(4.5);
     }
   });
 

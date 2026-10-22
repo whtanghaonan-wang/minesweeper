@@ -219,8 +219,8 @@ describe("游戏页", () => {
       .toBe(true);
     const topActions = root.querySelector(".top-actions")!;
     const bottomActions = root.querySelector(".bottom-actions")!;
-    expect(topActions.classList.contains("glass-light")).toBe(true);
-    expect(bottomActions.classList.contains("glass-light")).toBe(false);
+    expect(topActions.classList.contains("glass-calm")).toBe(true);
+    expect(bottomActions.classList.contains("glass-calm")).toBe(true);
     for (const button of root.querySelectorAll(".game-top button, .bottom-actions button")) {
       expect(button.hasAttribute("data-jelly")).toBe(true);
       expect(button.hasAttribute("data-liquid-glass")).toBe(false);
@@ -254,6 +254,20 @@ describe("游戏页", () => {
     press(cells[0]!); // 踩雷
     vi.advanceTimersByTime(1000);
     expect(results[0]).toMatchObject({ won: false, reason: "mine" });
+  });
+
+  it("鼠标左键遵循模式按钮，插旗后可切回挖开且右键仍能切旗", () => {
+    const cells = start();
+    root.querySelector<HTMLButtonElement>(".mode-btn:last-child")!.click();
+    press(cells[7]!);
+    expect(cells[7]!.classList.contains("flagged")).toBe(true);
+    expect(root.querySelectorAll(".cell.open")).toHaveLength(0);
+    expect(root.querySelector(".mine-stat")!.getAttribute("aria-label")).toBe("剩余雷数 6");
+    press(cells[7]!, { button: 2 });
+    expect(cells[7]!.classList.contains("flagged")).toBe(false);
+    root.querySelector<HTMLButtonElement>(".mode-btn:first-child")!.click();
+    press(cells[63]!);
+    expect(root.querySelectorAll(".cell.open").length).toBeGreaterThan(0);
   });
 
   it("倒计时归零判负（超时）", () => {
@@ -416,7 +430,7 @@ describe("游戏页", () => {
       onToggleSound: (on) => toggles.push(on),
     });
     const btn = root.querySelector<HTMLButtonElement>(".game-sound")!;
-    expect(btn.textContent).toBe("🔊"); // isMuted mock 恒 false
+    expect(btn.getAttribute("aria-label")).toBe("关闭音效"); // isMuted mock 恒 false
     btn.click();
     expect(vi.mocked(audio.setMuted)).toHaveBeenCalledWith(true);
     expect(toggles).toEqual([false]);

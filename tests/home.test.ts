@@ -55,61 +55,18 @@ function show(storage = createStorage(memBackend()), over: Partial<Parameters<ty
 }
 
 describe("首页", () => {
-  it("首页触控条按统计/主操作/次操作/工具分组且版本号在玻璃外", () => {
+  it("偏好工具与游戏菜单分开，所有入口保留可访问名称", () => {
     show();
     const panel = root.querySelector<HTMLElement>(".home-panel")!;
-    expect(Array.from(panel.children, (child) => child.classList[0])).toEqual([
-      "home-liquid-selection",
-      "home-stats",
-      "home-bar",
-      "home-play",
-      "home-secondary-actions",
-      "home-tools",
-    ]);
-
-    const secondaryActions = panel.querySelector<HTMLElement>(":scope > .home-secondary-actions")!;
-    const tools = panel.querySelector<HTMLElement>(":scope > .home-tools")!;
-    const buttonKinds = (container: HTMLElement): string[] =>
-      Array.from(container.children, (child) =>
-        `${child.tagName.toLowerCase()}.${child.classList[0]}`,
-      );
-    expect(buttonKinds(secondaryActions)).toEqual([
-      "button.home-select",
-      "button.home-endless",
-    ]);
-    expect(buttonKinds(tools)).toEqual([
-      "button.sound-btn",
-      "button.transparency-btn",
-    ]);
-
-    for (const [selector, parent] of [
-      [".home-select", secondaryActions],
-      [".home-endless", secondaryActions],
-      [".sound-btn", tools],
-      [".transparency-btn", tools],
-    ] as const) {
-      expect(panel.querySelectorAll(selector), selector).toHaveLength(1);
-      expect(panel.querySelector(selector)?.parentElement, selector).toBe(parent);
-      expect(panel.querySelector(`:scope > ${selector}`), selector).toBeNull();
-    }
-    expect(secondaryActions.querySelector(".sound-btn, .transparency-btn")).toBeNull();
-    expect(tools.querySelector(".home-select, .home-endless")).toBeNull();
+    const tools = root.querySelector<HTMLElement>(".home-tools")!;
+    expect(panel.contains(tools)).toBe(false);
+    expect(panel.querySelectorAll("button")).toHaveLength(3);
+    expect(tools.querySelectorAll("button")).toHaveLength(2);
+    expect(root.querySelector(".sound-btn")?.getAttribute("aria-label")).toBe("关闭音效");
+    expect(root.querySelector(".transparency-btn")?.getAttribute("aria-label")).toBe("降低透明度");
     expect(panel.querySelector(".home-ver")).toBeNull();
     expect(root.querySelector(".home > .home-ver")?.textContent).toBe("v9.9.9-test");
-  });
-
-  it("首页底部面板是唯一玻璃面且液化选中体默认包裹主操作", () => {
-    show();
-    const panel = root.querySelector<HTMLElement>(".home-panel")!;
-    expect(panel.hasAttribute("data-liquid-glass")).toBe(true);
-    expect(panel.classList.contains("glass-clear")).toBe(true);
-    const lobe = panel.querySelector<HTMLElement>(":scope > .home-liquid-selection")!;
-    expect(lobe.getAttribute("aria-hidden")).toBe("true");
-    expect(root.querySelectorAll("[data-liquid-glass]")).toHaveLength(1);
-    expect(root.querySelectorAll(".home-liquid-target")).toHaveLength(5);
-    expect(root.querySelectorAll(".home-liquid-target[data-jelly]")).toHaveLength(0);
-    expect(root.querySelectorAll(".home-liquid-target[data-liquid-glass]")).toHaveLength(0);
-    expect(root.querySelector(".home-play")?.classList.contains("is-home-selected")).toBe(true);
+    expect(root.querySelectorAll("[data-liquid-glass] [data-liquid-glass]")).toHaveLength(0);
   });
 
   it("降低透明度按钮同步 aria-pressed、DOM 与独立偏好", () => {
@@ -118,13 +75,13 @@ describe("首页", () => {
     const button = root.querySelector<HTMLButtonElement>(".transparency-btn")!;
     expect(button.getAttribute("aria-pressed")).toBe("false");
     expect(button.getAttribute("aria-label")).toBe("降低透明度");
-    expect(button.textContent).toBe("◫ 玻璃");
+    expect(button.title).toContain("当前为玻璃");
 
     button.click();
 
     expect(button.getAttribute("aria-pressed")).toBe("true");
     expect(button.getAttribute("aria-label")).toBe("降低透明度");
-    expect(button.textContent).toBe("◼ 实色");
+    expect(button.title).toContain("当前为实色");
     expect(uiPrefs.load().reducedTransparency).toBe(true);
     expect(document.documentElement.dataset["reducedTransparency"]).toBe("true");
   });
@@ -193,8 +150,11 @@ describe("首页", () => {
     vi.useFakeTimers();
     const t = show();
     (root.querySelector(".home-select") as HTMLButtonElement).click();
-    expect(t.selected).toBe(0);
-    vi.advanceTimersByTime(220);
+    expect(t.selected).toBe(1);
+    vi.advanceTimersByTime(1000);
+    expect(t.selected).toBe(1);
+    t.view.destroy();
+    root.querySelector<HTMLButtonElement>(".home-select")!.click();
     expect(t.selected).toBe(1);
   });
 
@@ -202,13 +162,13 @@ describe("首页", () => {
     const storage = createStorage(memBackend());
     show(storage);
     const btn = root.querySelector<HTMLButtonElement>(".sound-btn")!;
-    expect(btn.textContent).toBe("🔊");
+    expect(btn.getAttribute("aria-label")).toBe("关闭音效");
     btn.click();
-    expect(btn.textContent).toBe("🔇");
+    expect(btn.getAttribute("aria-label")).toBe("开启音效");
     expect(vi.mocked(setMuted)).toHaveBeenCalledWith(true);
     expect(storage.load().soundOn).toBe(false);
     btn.click();
-    expect(btn.textContent).toBe("🔊");
+    expect(btn.getAttribute("aria-label")).toBe("关闭音效");
     expect(vi.mocked(setMuted)).toHaveBeenLastCalledWith(false);
     expect(storage.load().soundOn).toBe(true);
   });
@@ -228,12 +188,12 @@ describe("首页", () => {
     expect(onPersisted).toHaveBeenCalledWith(false);
   });
 
-  it("存档静音时初始即 🔇;装饰藤蔓存在", () => {
+  it("存档静音时初始状态正确；装饰藤蔓对读屏隐藏", () => {
     const storage = createStorage(memBackend());
     storage.setSoundOn(false);
     show(storage);
-    expect(root.querySelector(".sound-btn")!.textContent).toBe("🔇");
-    expect(root.querySelector(".home-vine path")).not.toBeNull();
+    expect(root.querySelector(".sound-btn")!.getAttribute("aria-label")).toBe("开启音效");
+    expect(root.querySelector(".home-vine")?.getAttribute("aria-hidden")).toBe("true");
   });
 
   it("无尽入口:未通关 50 关时灰态锁定并示明条件", () => {
@@ -254,8 +214,8 @@ describe("首页", () => {
     const btn = root.querySelector<HTMLButtonElement>(".home-endless")!;
     expect(btn.disabled).toBe(false);
     btn.click();
-    expect(t.endless).toBe(0);
-    vi.advanceTimersByTime(220);
+    expect(t.endless).toBe(1);
+    vi.advanceTimersByTime(1000);
     expect(t.endless).toBe(1);
   });
 

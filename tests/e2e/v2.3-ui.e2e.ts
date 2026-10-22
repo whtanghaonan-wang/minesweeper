@@ -94,6 +94,7 @@ test("200% 根字号不产生页面横向溢出，非棋盘按钮仍至少 44px"
 });
 
 test("纵横屏重排保持逻辑焦点", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
   await page.setViewportSize({ width: 390, height: 844 });
   await openLevel50(page);
   const active = page.locator('[role="gridcell"][tabindex="0"]');
@@ -126,7 +127,7 @@ test("适合屏幕完整容纳大盘，切回可操作尺寸后可平移", async
   expect(board!.y).toBeGreaterThanOrEqual(viewport!.y - 1);
   expect(board!.y + board!.height).toBeLessThanOrEqual(viewport!.y + viewport!.height + 1);
 
-  await page.getByRole("button", { name: "可操作尺寸" }).click();
+  await page.getByRole("button", { name: "放大操作" }).click();
   const first = await page.getByRole("gridcell").first().boundingBox();
   expect(first!.width).toBeGreaterThanOrEqual(23.5);
   const transformBefore = await page.getByRole("grid").evaluate((element) => element.style.transform);
@@ -193,48 +194,28 @@ test("首页、菜单和游戏无 serious/critical axe 问题", async ({ page })
     .toEqual([]);
 });
 
-test("强玻璃有标准/WebKit blur 和蓝色选中态，手动降低透明度即时实色", async ({ page }) => {
+test("轻玻璃可降低透明度，主操作始终保持清晰", async ({ page }) => {
   await page.goto("/");
   const panel = page.locator(".home-panel");
-  const before = await panel.evaluate((element) => ({
+  const before = await panel.evaluate(element => ({
     backdrop: getComputedStyle(element).backdropFilter,
     webkit: getComputedStyle(element).getPropertyValue("-webkit-backdrop-filter"),
-    shadow: getComputedStyle(element).boxShadow,
   }));
   expect(`${before.backdrop} ${before.webkit}`.toLowerCase()).toContain("blur");
-  expect(before.shadow).toMatch(
-    /rgba?\(\s*42\s*,\s*57\s*,\s*45(?:\s*,|\s*\/\s*)\s*0\.6\s*\)/,
-  );
-  const play = page.locator(".home-play");
-  const playBefore = await play.evaluate((element) => ({
-    color: getComputedStyle(element).color,
-    image: getComputedStyle(element).backgroundImage,
-    selectedBlue: getComputedStyle(element.closest(".home-panel")!)
-      .getPropertyValue("--home-selected-blue").trim(),
-  }));
-  await expect(play).toHaveClass(/is-home-selected/);
-  expect(playBefore.selectedBlue).toBe("#005fc7");
-  expect(playBefore.color).toBe("rgb(0, 95, 199)");
-  expect(playBefore.image).toBe("none");
-
-  const transparency = page.locator(".transparency-btn");
-  await transparency.click();
+  const primaryColor = await page.locator(".home-play").evaluate(element => getComputedStyle(element).color);
+  await page.locator(".transparency-btn").click();
   await expect(page.locator("html")).toHaveAttribute("data-reduced-transparency", "true");
-  const after = await panel.evaluate((element) => ({
+  const after = await panel.evaluate(element => ({
     backdrop: getComputedStyle(element).backdropFilter,
     webkit: getComputedStyle(element).getPropertyValue("-webkit-backdrop-filter"),
-    background: getComputedStyle(element).backgroundColor,
     beforeDisplay: getComputedStyle(element, "::before").display,
     afterDisplay: getComputedStyle(element, "::after").display,
   }));
-  expect([after.backdrop, after.webkit].every((value) => value === "none" || value === ""))
-    .toBe(true);
-  expect(after.background).toBe("rgba(247, 248, 244, 0.96)");
+  expect([after.backdrop, after.webkit].every(value => value === "none" || value === "")).toBe(true);
   expect(after.beforeDisplay).toBe("none");
   expect(after.afterDisplay).toBe("none");
-  await expect(play).not.toHaveClass(/is-home-selected/);
-  await expect(transparency).toHaveClass(/is-home-selected/);
-  await expect(transparency).toHaveCSS("color", "rgb(0, 95, 199)");
+  await expect(page.locator(".home-play")).toHaveCSS("color", primaryColor);
+  await expect(page.locator(".transparency-btn")).toHaveAttribute("aria-pressed", "true");
 });
 
 test("同一视觉簇没有嵌套光学表面，棋盘没有 glass/filter", async ({ page }) => {
@@ -268,13 +249,8 @@ test("减少动态时键盘只激活一次且没有旧弹性 transform 状态", 
 
   await expect(sound).toHaveAttribute("data-test-keyboard-click-count", "1");
   await expect(sound).not.toHaveAttribute("aria-label", originalLabel!);
-  await expect(sound).toHaveClass(/is-home-selected/);
-  await expect(page.locator(".home-liquid-selection")).toBeVisible();
-  await expect(page.locator(
-    ".home-liquid-target[data-jelly], " +
-    ".home-liquid-target.is-glass-pressed, " +
-    ".home-liquid-target.is-glass-releasing",
-  )).toHaveCount(0);
+  await expect(sound).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator(".home-liquid-selection")).toHaveCount(0);
 
   const transform = await sound.evaluate((element) => getComputedStyle(element).transform);
   expect(transform === "none" || transform === "matrix(1, 0, 0, 1, 0, 0)").toBe(true);

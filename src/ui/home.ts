@@ -2,15 +2,8 @@ import { LEVELS, type LevelSpec } from "../core/levels";
 import type { GameStorage } from "../core/storage";
 import { setMuted } from "./audio";
 import { fmtTime } from "./format";
-import {
-  installHomeLiquidSelection,
-  type HomeLiquidSelectionController,
-  type HomeLiquidTarget,
-} from "./home-liquid-selection";
-import {
-  applyReducedTransparency,
-  type UiPrefsStore,
-} from "./ui-prefs";
+import { icon, iconLabel } from "./icons";
+import { applyReducedTransparency, type UiPrefsStore } from "./ui-prefs";
 
 export interface HomeDeps {
   storage: GameStorage;
@@ -21,183 +14,146 @@ export interface HomeDeps {
   onEndless(): void;
   onPersisted?(persisted: boolean): void;
 }
-
 export interface HomeViewController {
   cancelAll(): void;
   destroy(): void;
 }
-
-const SVG_NS = "http://www.w3.org/2000/svg";
 const MAX = LEVELS.length;
 
-/** 游戏首界面:藤蔓延伸式(v2.1 设计文档 §4) */
 export function showHome(root: HTMLElement, deps: HomeDeps): HomeViewController {
+  const events = new AbortController();
   const save = deps.storage.load();
-  const done = LEVELS.filter(
-    (l) => save.bestTimes[l.id] !== undefined || l.id < save.unlockedLevel,
-  ).length;
-  const bestOwner = [...LEVELS].reverse().find((l) => save.bestTimes[l.id] !== undefined);
+  const done = LEVELS.filter(l => save.bestTimes[l.id] !== undefined || l.id < save.unlockedLevel).length;
+  const bestOwner = [...LEVELS].reverse().find(l => save.bestTimes[l.id] !== undefined);
   const cleared = save.bestTimes[MAX] !== undefined;
   const fresh = save.unlockedLevel === 1 && save.bestTimes[1] === undefined;
   const target = LEVELS[(cleared ? MAX : save.unlockedLevel) - 1]!;
-  const primaryLabel = fresh
-    ? "开始游戏 · 第 1 关"
-    : cleared
-      ? `再战 · 第 ${MAX} 关`
-      : `继续 · 第 ${save.unlockedLevel} 关`;
+  const primaryLabel = fresh ? "开始游戏 · 第 1 关"
+    : cleared ? `再战 · 第 ${MAX} 关` : `继续 · 第 ${save.unlockedLevel} 关`;
 
   const home = document.createElement("div");
   home.className = "home";
+  const tools = document.createElement("div");
+  tools.className = "home-tools";
+  tools.setAttribute("role", "group");
+  tools.setAttribute("aria-label", "游戏偏好");
+  let soundOn = save.soundOn;
+  const soundBtn = makeButton("sound-btn", () => {
+    soundOn = !soundOn;
+    setMuted(!soundOn);
+    const persisted = deps.storage.setSoundOn(soundOn);
+    deps.onPersisted?.(persisted);
+    syncSound();
+  });
+  const syncSound = (): void => {
+    soundBtn.replaceChildren(icon(soundOn ? "sound" : "muted"));
+    soundBtn.setAttribute("aria-label", soundOn ? "关闭音效" : "开启音效");
+    soundBtn.setAttribute("aria-pressed", String(soundOn));
+    soundBtn.title = soundOn ? "关闭音效" : "开启音效";
+  };
+  syncSound();
+  let reduced = deps.uiPrefs.load().reducedTransparency;
+  const appearanceBtn = makeButton("transparency-btn", () => {
+    reduced = !reduced;
+    deps.uiPrefs.setReducedTransparency(reduced);
+    syncAppearance();
+  });
+  appearanceBtn.append(icon("palette"));
+  const syncAppearance = (): void => {
+    appearanceBtn.setAttribute("aria-label", "降低透明度");
+    appearanceBtn.setAttribute("aria-pressed", String(reduced));
+    appearanceBtn.title = reduced ? "当前为实色，切换为玻璃" : "当前为玻璃，切换为实色";
+    applyReducedTransparency(reduced);
+  };
+  syncAppearance();
+  tools.append(soundBtn, appearanceBtn);
 
   const hero = document.createElement("div");
   hero.className = "home-hero";
-  hero.appendChild(buildVineDeco());
+  const vine = document.createElement("img");
+  vine.className = "home-vine";
+  vine.src = `${import.meta.env.BASE_URL}art/home-vine.png`;
+  vine.alt = "";
+  vine.setAttribute("aria-hidden", "true");
+  vine.draggable = false;
   const title = document.createElement("h1");
   title.textContent = "扫雷";
   title.tabIndex = -1;
   const sub = document.createElement("p");
   sub.className = "home-sub";
-  sub.textContent = "沿着藤蔓,一路向上";
-  hero.append(title, sub);
+  sub.textContent = "沿着藤蔓，一路向上";
+  const heading = document.createElement("div");
+  heading.className = "home-heading";
+  heading.append(title, sub);
+  hero.append(vine, heading);
 
   const panel = document.createElement("section");
-  panel.className = "home-panel glass-clear";
+  panel.className = "home-panel glass-clear glass-calm";
   panel.dataset["liquidGlass"] = "";
-
+  panel.setAttribute("aria-label", "开始与选择游戏");
   const stats = document.createElement("div");
   stats.className = "home-stats num";
   const doneStat = document.createElement("span");
-  doneStat.textContent = `🌱 已通关 ${done}/${MAX}`;
+  iconLabel(doneStat, "sprout", `已通关 ${done}/${MAX}`);
   const bestStat = document.createElement("span");
-  bestStat.textContent = `⏱ 最近通关 ${bestOwner ? fmtTime(save.bestTimes[bestOwner.id]!) : "—"}`;
-  const soundBtn = document.createElement("button");
-  soundBtn.type = "button";
-  soundBtn.className = "sound-btn";
-  let on = save.soundOn;
-  const syncSound = (): void => {
-    soundBtn.textContent = on ? "🔊" : "🔇";
-    soundBtn.setAttribute("aria-label", on ? "关闭音效" : "开启音效");
-  };
-  syncSound();
-  const toggleSound = (): void => {
-    on = !on;
-    setMuted(!on);
-    const persisted = deps.storage.setSoundOn(on);
-    deps.onPersisted?.(persisted);
-    syncSound();
-  };
+  iconLabel(bestStat, "timer", `最近通关 ${bestOwner ? fmtTime(save.bestTimes[bestOwner.id]!) : "—"}`);
   stats.append(doneStat, bestStat);
   if (save.endless.bestStreak > 0) {
-    const streakStat = document.createElement("span");
-    streakStat.textContent = `♾ 最长连胜 ${save.endless.bestStreak}`;
-    stats.appendChild(streakStat);
+    const streak = document.createElement("span");
+    streak.className = "home-streak";
+    iconLabel(streak, "endless", `最长连胜 ${save.endless.bestStreak}`);
+    stats.append(streak);
   }
-  const transparencyBtn = document.createElement("button");
-  transparencyBtn.type = "button";
-  transparencyBtn.className = "transparency-btn";
-  let reduced = deps.uiPrefs.load().reducedTransparency;
-  const syncTransparency = (): void => {
-    transparencyBtn.textContent = reduced ? "◼ 实色" : "◫ 玻璃";
-    transparencyBtn.setAttribute("aria-label", "降低透明度");
-    transparencyBtn.setAttribute("aria-pressed", String(reduced));
-    applyReducedTransparency(reduced);
-  };
-  const toggleTransparency = (): void => {
-    reduced = !reduced;
-    deps.uiPrefs.setReducedTransparency(reduced);
-    syncTransparency();
-  };
-  syncTransparency();
-  const tools = document.createElement("div");
-  tools.className = "home-tools";
-  tools.append(soundBtn, transparencyBtn);
-
-  const barWrap = document.createElement("div");
-  barWrap.className = "home-bar";
+  const progress = document.createElement("div");
+  progress.className = "home-bar";
+  progress.setAttribute("role", "progressbar");
+  progress.setAttribute("aria-label", "通关进度");
+  progress.setAttribute("aria-valuemin", "0");
+  progress.setAttribute("aria-valuemax", String(MAX));
+  progress.setAttribute("aria-valuenow", String(done));
   const fill = document.createElement("div");
   fill.className = "home-bar-fill";
-  fill.style.width = `${(done / MAX) * 100}%`;
-  barWrap.appendChild(fill);
-
-  const playBtn = document.createElement("button");
-  playBtn.type = "button";
-  playBtn.className = "home-play";
-  playBtn.textContent = `▶ ${primaryLabel}`;
-  const selBtn = document.createElement("button");
-  selBtn.type = "button";
-  selBtn.className = "home-select";
-  selBtn.textContent = "🌿 选关";
-  const endlessBtn = document.createElement("button");
-  endlessBtn.type = "button";
-  endlessBtn.className = "home-endless";
-  if (cleared) {
-    endlessBtn.textContent = "♾ 无尽";
-  } else {
+  fill.style.width = `${done / MAX * 100}%`;
+  progress.append(fill);
+  const playBtn = makeButton("home-play", () => deps.onContinue(target));
+  iconLabel(playBtn, "play", primaryLabel);
+  const selectBtn = makeButton("home-select", deps.onSelect);
+  iconLabel(selectBtn, "leaf", "选关");
+  const endlessBtn = makeButton("home-endless", deps.onEndless);
+  const endlessLabel = document.createElement("span");
+  endlessLabel.className = "he-label";
+  iconLabel(endlessLabel, "endless", "无尽");
+  endlessBtn.append(endlessLabel);
+  if (!cleared) {
     endlessBtn.disabled = true;
     endlessBtn.classList.add("locked");
-    endlessBtn.innerHTML = `♾ 无尽<span class="he-sub">🔒 通关 50 关解锁</span>`;
+    const hint = document.createElement("span");
+    hint.className = "he-sub";
+    iconLabel(hint, "lock", "通关 50 关解锁");
+    endlessBtn.append(hint);
   }
-  const secondaryActions = document.createElement("div");
-  secondaryActions.className = "home-secondary-actions";
-  secondaryActions.append(selBtn, endlessBtn);
-
-  const ver = document.createElement("p");
-  ver.className = "home-ver num";
-  ver.textContent = `v${deps.version}`;
-
-  const indicator = document.createElement("div");
-  indicator.className = "home-liquid-selection";
-  indicator.setAttribute("aria-hidden", "true");
-
-  for (const button of [playBtn, selBtn, endlessBtn, soundBtn, transparencyBtn]) {
-    button.classList.add("home-liquid-target");
-  }
-
-  panel.append(indicator, stats, barWrap, playBtn, secondaryActions, tools);
-  home.append(hero, panel, ver);
+  const secondary = document.createElement("div");
+  secondary.className = "home-secondary-actions";
+  secondary.append(selectBtn, endlessBtn);
+  const version = document.createElement("p");
+  version.className = "home-ver num";
+  version.textContent = `v${deps.version}`;
+  panel.append(stats, progress, playBtn, secondary);
+  home.append(tools, hero, panel, version);
   root.replaceChildren(home);
-
-  const targets: HomeLiquidTarget[] = [
-    { button: playBtn, kind: "navigation", activate: () => deps.onContinue(target) },
-    { button: selBtn, kind: "navigation", activate: () => deps.onSelect() },
-    { button: endlessBtn, kind: "navigation", activate: () => deps.onEndless() },
-    { button: soundBtn, kind: "instant", activate: toggleSound },
-    { button: transparencyBtn, kind: "instant", activate: toggleTransparency },
-  ];
-  const liquidSelection: HomeLiquidSelectionController = installHomeLiquidSelection(
-    panel,
-    indicator,
-    targets,
-    playBtn,
-  );
   title.focus();
   return {
-    cancelAll: () => liquidSelection.cancelAll(),
-    destroy: () => liquidSelection.destroy(),
+    // Home actions are immediate; no delayed navigation remains to cancel.
+    cancelAll: () => {},
+    destroy: () => events.abort(),
   };
-}
 
-/** 装饰藤蔓:自顶垂落,CSS 驱动生长动画(prefers-reduced-motion 时静态) */
-function buildVineDeco(): SVGSVGElement {
-  const svg = document.createElementNS(SVG_NS, "svg");
-  svg.setAttribute("viewBox", "0 0 260 330");
-  svg.setAttribute("aria-hidden", "true");
-  svg.classList.add("home-vine");
-  const path = document.createElementNS(SVG_NS, "path");
-  path.setAttribute("d", "M 130 -10 C 70 60, 190 100, 130 170 C 80 230, 170 260, 140 330");
-  path.setAttribute("pathLength", "1");
-  svg.appendChild(path);
-  const dot = (x: number, y: number, r: number, cls: string): void => {
-    const c = document.createElementNS(SVG_NS, "circle");
-    c.setAttribute("cx", String(x));
-    c.setAttribute("cy", String(y));
-    c.setAttribute("r", String(r));
-    c.classList.add(cls);
-    svg.appendChild(c);
-  };
-  dot(105, 62, 7, "home-leaf");
-  dot(163, 108, 7, "home-leaf");
-  dot(130, 170, 10, "home-bud");
-  dot(122, 258, 8, "home-leaf");
-  return svg;
+  function makeButton(className: string, activate: () => void): HTMLButtonElement {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = className;
+    button.dataset["jelly"] = "";
+    button.addEventListener("click", activate, { signal: events.signal });
+    return button;
+  }
 }
