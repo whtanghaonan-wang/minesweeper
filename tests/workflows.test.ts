@@ -6,6 +6,8 @@ type Workflow = {
   on?: Record<string, unknown>;
   permissions?: Record<string, string>;
   jobs?: Record<string, {
+    container?: { image?: string; options?: string };
+    "timeout-minutes"?: number;
     steps?: Array<Record<string, unknown>>;
     needs?: string;
     environment?: string | { name?: string };
@@ -66,6 +68,18 @@ describe("GitHub Actions v2.3 闸门", () => {
     expect(text).not.toContain("gh release create");
   });
 
+  it("Pages 使用与锁文件版本一致的预装浏览器镜像，并限制运行时间", () => {
+    const workflow = readWorkflow(".github/workflows/deploy.yml");
+    const lock = JSON.parse(readFileSync("package-lock.json", "utf8")) as {
+      packages: Record<string, { version: string }>;
+    };
+    const version = lock.packages["node_modules/@playwright/test"]!.version;
+    const build = workflow.jobs?.["build"];
+    expect(build?.container?.image).toBe(`mcr.microsoft.com/playwright:v${version}-noble`);
+    expect(build?.["timeout-minutes"]).toBe(20);
+    expect(workflow.jobs?.["deploy"]?.["timeout-minutes"]).toBe(10);
+  });
+
   it("Pages 在 upload 前顺序执行全部版本/测试/PWA/build 闸门", () => {
     const workflow = readWorkflow(".github/workflows/deploy.yml");
     const steps = workflow.jobs?.["build"]?.steps ?? [];
@@ -73,7 +87,6 @@ describe("GitHub Actions v2.3 闸门", () => {
       typeof value === "string");
     expect(runs).toEqual([
       "npm ci",
-      "npx playwright install --with-deps chromium webkit",
       "npm run version:check",
       "npm test",
       "npm run test:e2e",
